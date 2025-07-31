@@ -27,7 +27,7 @@ setup(
         "scikit-learn==1.1.2",
         "graphlib-backport",
         "openai==1.19.0",
-        "pyyaml==6.0",
+        "pyyaml==6.0.2",
         "pylint==2.14.5",
         "types-PyYAML",
         "lisdf",

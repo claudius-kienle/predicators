@@ -1,0 +1,20 @@
+[workspace]
+authors = ["Claudius Kienle <claudius.kienle@tu-darmstadt.de>"]
+channels = ["conda-forge"]
+name = "predicators-pix2pred-april2025"
+platforms = ["linux-64"]
+version = "0.1.0"
+
+[tasks]
+
+[dependencies]
+python = "3.10.*"
+
+
+[pypi-dependencies]
+predicators = {path = ".", editable = true}
+pddl-utils = { git = "https://github.com/claudius-kienle/pddl-utils" }
+
+[activation.env]
+PYTHONHASHSEED = "0"
+FD_EXEC_PATH = "/home/claudius-kienle/Documents/Projects/DEA/digital-engineering-assistant/packages/pddl-utils/src/pddl_utils/planning/FD"

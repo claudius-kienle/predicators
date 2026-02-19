@@ -35,3 +35,9 @@ predicators/datasets/vlm_input_data_prompts/vision_api/response.txt
 
 # Jetbrains IDEs
 .idea/
+
+# pixi environments
+.pixi
+*.egg-info
+
+/lodge-handover

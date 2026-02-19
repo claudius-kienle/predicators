@@ -498,6 +498,16 @@ def _parse_structured_state_into_ground_atoms(
             for pred_name, objs_and_val_dict in structured_state.items():
                 for pred_i, (objs_strs, truth_val) in enumerate(
                         sorted(objs_and_val_dict.items())):
+                    # FIXME: hotfix to account for LLM hallucinations
+                    objs_strs_2 = []
+                    for obj_str in objs_strs:
+                        if obj_str in ["armrobot", "arm_robot", "robot"]:
+                            obj_str = "arm:robot"
+                        for sep in [":", "."]:
+                            if sep in obj_str:
+                                obj_str = obj_str.split(sep)[0]
+                        objs_strs_2.append(obj_str)
+                    objs_strs = objs_strs_2
                     objs_types = [
                         curr_obj_name_to_obj[obj_name].type
                         for obj_name in objs_strs

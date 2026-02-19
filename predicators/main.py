@@ -84,7 +84,7 @@ def main() -> None:
     logging.info(f"Running command: python {str_args}")
     logging.info("Full config:")
     logging.info(CFG)
-    logging.info(f"Git commit hash: {utils.get_git_commit_hash()}")
+    # logging.info(f"Git commit hash: {utils.get_git_commit_hash()}")
     # Create results directory.
     os.makedirs(CFG.results_dir, exist_ok=True)
     # Create the eval trajectories directory.
@@ -190,13 +190,14 @@ def _run_pipeline(env: BaseEnv,
         }
         # Run evaluation once before online learning starts.
         if CFG.skip_until_cycle < 0:
-            results = _run_testing(env, cogman)
-            results["num_offline_transitions"] = num_offline_transitions
-            results["num_online_transitions"] = num_online_transitions
-            results["query_cost"] = total_query_cost
-            results["learning_time"] = learning_time
-            results.update(offline_learning_metrics)
-            _save_test_results(results, online_learning_cycle=None)
+            pass
+            # results = _run_testing(env, cogman)
+            # results["num_offline_transitions"] = num_offline_transitions
+            # results["num_online_transitions"] = num_online_transitions
+            # results["query_cost"] = total_query_cost
+            # results["learning_time"] = learning_time
+            # results.update(offline_learning_metrics)
+            # _save_test_results(results, online_learning_cycle=None)
         # Only create a teacher if there are possibly queries coming.
         if get_allowed_query_type_names():
             teacher = Teacher(train_tasks)
@@ -249,20 +250,21 @@ def _run_pipeline(env: BaseEnv,
                 learning_time += time.perf_counter() - learning_start
 
             # Evaluate approach after every online learning cycle.
-            results = _run_testing(env, cogman)
-            results["num_offline_transitions"] = num_offline_transitions
-            results["num_online_transitions"] = num_online_transitions
-            results["query_cost"] = total_query_cost
-            results["learning_time"] = learning_time
-            results.update(offline_learning_metrics)
-            _save_test_results(results, online_learning_cycle=i)
+            # results = _run_testing(env, cogman)
+            # results["num_offline_transitions"] = num_offline_transitions
+            # results["num_online_transitions"] = num_online_transitions
+            # results["query_cost"] = total_query_cost
+            # results["learning_time"] = learning_time
+            # results.update(offline_learning_metrics)
+            # _save_test_results(results, online_learning_cycle=i)
     else:
-        results = _run_testing(env, cogman)
-        results["num_offline_transitions"] = 0
-        results["num_online_transitions"] = 0
-        results["query_cost"] = 0.0
-        results["learning_time"] = 0.0
-        _save_test_results(results, online_learning_cycle=None)
+        pass
+        # results = _run_testing(env, cogman)
+        # results["num_offline_transitions"] = 0
+        # results["num_online_transitions"] = 0
+        # results["query_cost"] = 0.0
+        # results["learning_time"] = 0.0
+        # _save_test_results(results, online_learning_cycle=None)
 
 
 def _generate_interaction_results(
@@ -508,7 +510,7 @@ def _save_test_results(results: Metrics,
     outdata = {
         "config": CFG,
         "results": results.copy(),
-        "git_commit_hash": utils.get_git_commit_hash()
+        # "git_commit_hash": utils.get_git_commit_hash()
     }
     # Dump the CFG, results, and git commit hash to a pickle file.
     with open(outfile, "wb") as f:

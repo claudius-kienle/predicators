@@ -14,6 +14,8 @@ python = "3.10.*"
 [pypi-dependencies]
 predicators = {path = ".", editable = true}
 pddl-utils = { git = "https://github.com/claudius-kienle/pddl-utils" }
+fastapi = ">=0.129.0, <0.130"
+uvicorn = ">=0.41.0, <0.42"
 
 [activation.env]
 PYTHONHASHSEED = "0"

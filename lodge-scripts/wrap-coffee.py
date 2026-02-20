@@ -36,35 +36,33 @@ def parse_tasks(env: BaseEnv, domain_name: str) -> Generator[str, None, None]:
 LODGE_EXP_DIR = Path(__file__).parent.parent.parent.parent
 
 def gen_data():
-    args = utils.parse_args()
-    utils.update_config(args)
-    env = create_new_env(CFG.env, do_cache=True, use_gui=CFG.use_gui)
+    utils.update_config({"seed": 0})
+    env = create_new_env("pybullet_coffee", do_cache=True, use_gui=False)
     domain_name = env.get_name()
 
     exp_dir = LODGE_EXP_DIR / "demos/predicators/data" / env.get_name()
     assert exp_dir.is_dir(), f"Expected {exp_dir} to be a directory"
 
-    if False:
+    if True:
         # generate problems
         for i, task in enumerate(parse_tasks(env, domain_name)):
             (exp_dir / "problems" / f"p{i:02d}.pddl").write_text(task)
 
-    if True:
+    if False:
         # generate domain
         preds = env.predicates
         options = get_gt_options(env.get_name())
 
         nsrts = get_gt_nsrts(env.get_name(), predicates_to_keep=preds, options_to_keep=options)
-        operators = [nsrt for nsrt in nsrts]
 
-        domain_pddl = utils.create_pddl_domain(operators, preds, env.types, domain_name)
+        domain_pddl = utils.create_pddl_domain(nsrts, preds, env.types, domain_name)
         (exp_dir / "domain.pddl").write_text(domain_pddl)
 
         # domain skeleton
         domain_pddl = utils.create_pddl_domain([], env.goal_predicates, env.types, domain_name)
         (exp_dir / "domain_skeleton.pddl").write_text(domain_pddl)
 
-    if False:
+    if True:
         # generate function stubs (options)
         options = get_gt_options(env.get_name())
 
@@ -75,7 +73,7 @@ def gen_data():
             func_subs_str += f"def {option_name}({params}): ...\n\n"
         (exp_dir / "function_stubs.py").write_text(func_subs_str)
 
-    if False:
+    if True:
         # generate domain knowledge
         (exp_dir / "domain_knowledge.txt").write_text(env.__doc__ or "")
 

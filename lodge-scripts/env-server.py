@@ -1,7 +1,7 @@
 import json
-from typing import Sequence
 
 import numpy as np
+from PIL import Image
 from pydantic import BaseModel
 from fastapi import FastAPI
 from predicators import utils
@@ -61,9 +61,9 @@ class StateStorage:
         return key in self.states
 
 
-def image_to_base64(image) -> str:
+def image_to_base64(image: Image.Image) -> str:
     img_byte_arr = io.BytesIO()
-    image.savefig(img_byte_arr, format="PNG")
+    image.save(img_byte_arr, format="PNG")
     img_byte_arr.seek(0)
 
     return base64.b64encode(img_byte_arr.getvalue()).decode("utf-8")
@@ -89,13 +89,23 @@ utils.update_config(
         "seed": 0,
     }
 )
-env = create_new_env("coffee", do_cache=True, use_gui=False)
+env = create_new_env("pybullet_coffee", do_cache=True, use_gui=False)
 
 states = StateStorage()
 
 
 def _get_curr_state() -> State:
     return env._current_observation
+
+def _get_image() -> Image.Image:
+    try:
+        image = env.render_plt()
+        image = image.get_figure()
+    except NotImplementedError:
+        images = env.render()
+        assert len(images) == 1, "Expected exactly one camera image"
+        image = Image.fromarray(images[0])
+    return image
 
 
 def _get_curr_hash():
@@ -126,7 +136,7 @@ def reset(task_idx: int):
     # env.restart_recording()
     env.reset(train_or_test="train", task_idx=task_idx)
 
-    env.render_plt().savefig("image2.png")
+    _get_image().save("image2.png")
     _add_curr_state()
 
 
@@ -157,7 +167,7 @@ def get_image() -> str:
         dict: Dictionary containing base64 encoded PNG image
     """
     # image = get_image_with_labels(env)
-    image = env.render_plt()
+    image = _get_image()
 
     return image_to_base64(image)
 

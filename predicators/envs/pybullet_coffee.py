@@ -1,7 +1,7 @@
 """A PyBullet version of Coffee."""
 
 import logging
-from typing import Any, ClassVar, Dict, List, Optional, Tuple
+from typing import Any, ClassVar, Dict, List, Tuple
 
 import numpy as np
 import pybullet as p
@@ -598,3 +598,28 @@ class PyBulletCoffeeEnv(PyBulletEnv, CoffeeEnv):
             # If not detecting jug as held, force it.
             self._held_obj_id = self._jug_id
             self._create_grasp_constraint()
+
+    @classmethod
+    def fingers_state_to_joint(
+        cls, pybullet_robot: SingleArmPyBulletRobot, fingers_state: float
+    ) -> float:
+        """Convert the fingers in the given State to joint values for PyBullet.
+
+        The fingers in the State are either open_fingers or closed_fingers.
+        Transform them to be either pybullet_robot.closed_fingers or
+        pybullet_robot.open_fingers.
+        """
+        open_f = pybullet_robot.open_fingers
+        closed_f = pybullet_robot.closed_fingers
+        threshold = (cls.open_fingers + cls.closed_fingers) / 2
+        return open_f if fingers_state > threshold else closed_f
+
+    def _get_jug_z(self, state: State, jug: Object) -> float:
+        """Get the z position of the jug."""
+        if state.get(jug, "is_held") > 0.5:
+            # If held, jug z is relative to robot position
+            robot, = state.get_objects(self._robot_type)
+            return state.get(robot, "z") - self.jug_handle_height
+        else:
+            # If not held, jug sits on the table
+            return self.z_lb

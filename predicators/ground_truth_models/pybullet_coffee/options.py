@@ -304,8 +304,8 @@ class PyBulletCoffeeGroundTruthOptionFactory(GroundTruthOptionFactory):
             option_types,
             params_space,
             _get_current_and_target_pose_and_finger_status,
-            CFG.pybullet_max_vel_norm,
             cls._move_to_pose_tol,
+            CFG.pybullet_max_vel_norm,
             cls._finger_action_nudge_magnitude,
         )
 
@@ -354,8 +354,8 @@ class PyBulletCoffeeGroundTruthOptionFactory(GroundTruthOptionFactory):
             option_types,
             params_space,
             _get_current_and_target_pose_and_finger_status,
-            CFG.pybullet_max_vel_norm,
             cls._move_to_pose_tol,
+            CFG.pybullet_max_vel_norm,
             cls._finger_action_nudge_magnitude,
         )
 
@@ -406,8 +406,8 @@ class PyBulletCoffeeGroundTruthOptionFactory(GroundTruthOptionFactory):
             option_types,
             params_space,
             _get_current_and_target_pose_and_finger_status,
-            CFG.pybullet_max_vel_norm,
             cls._move_to_pose_tol,
+            CFG.pybullet_max_vel_norm,
             cls._finger_action_nudge_magnitude,
         )
 
@@ -453,8 +453,8 @@ class PyBulletCoffeeGroundTruthOptionFactory(GroundTruthOptionFactory):
             option_types,
             params_space,
             _get_current_and_target_pose_and_finger_status,
-            CFG.pybullet_max_vel_norm,
             cls._move_to_pose_tol,
+            CFG.pybullet_max_vel_norm,
             cls._finger_action_nudge_magnitude,
         )
 
@@ -496,8 +496,8 @@ class PyBulletCoffeeGroundTruthOptionFactory(GroundTruthOptionFactory):
             option_types,
             params_space,
             _get_current_and_target_pose_and_finger_status,
-            CFG.pybullet_max_vel_norm,
             cls._move_to_pose_tol,
+            CFG.pybullet_max_vel_norm,
             cls._finger_action_nudge_magnitude,
         )
 

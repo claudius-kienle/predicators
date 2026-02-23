@@ -81,7 +81,6 @@ def remap_state_to_dict(state: State) -> dict[str, dict[str, float]]:
 
 
 app = FastAPI()
-tolerance = 5e-3
 
 # args = utils.parse_args()
 utils.update_config(

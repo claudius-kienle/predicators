@@ -24,12 +24,6 @@
             "program": "${file}",
             "console": "integratedTerminal",
             "args": [
-                "--env",
-                "coffee",
-                "--approach",
-                "grammar_search_invention",
-                "--seed",
-                "0"
             ]
         }
     ]

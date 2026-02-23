@@ -35,7 +35,7 @@ class PyBulletCoffeeEnv(PyBulletEnv, CoffeeEnv):
     y_lb: ClassVar[float] = 0.4
     y_ub: ClassVar[float] = 1.1
     z_lb: ClassVar[float] = (
-        0.2  # Table surface height (table box height 0.4m, centered at z=0)
+        0.16  # Table surface height (table box height 0.4m, centered at z=0)
     )
     z_ub: ClassVar[float] = 1.0  # Reduced from 1.5 to be reachable
 
@@ -63,7 +63,7 @@ class PyBulletCoffeeEnv(PyBulletEnv, CoffeeEnv):
     # Scale cup dimensions.
     cup_radius: ClassVar[float] = 0.03
     cup_init_x_lb: ClassVar[float] = machine_x - 0.2
-    cup_init_x_ub: ClassVar[float] = machine_x  - 0.1
+    cup_init_x_ub: ClassVar[float] = machine_x - 0.1
     cup_init_y_lb: ClassVar[float] = machine_y + 0.2
     cup_init_y_ub: ClassVar[float] = machine_y + 0.6
     cup_capacity_lb: ClassVar[float] = 0.06
@@ -196,8 +196,8 @@ class PyBulletCoffeeEnv(PyBulletEnv, CoffeeEnv):
         # Load the SAPIEN coffee machine URDF
         # The URDF has rotation applied and bounding box: min=[-0.52, -0.68, -0.59], max=[0.52, 0.69, 0.84]
         # With globalScaling=0.1, the height is ~0.14m
-        scale = 0.15
-        machine_height = 0.14 * scale / 0.1  # Approximate height after scaling
+        scale = 0.20
+        machine_height = 0.18 * scale / 0.1  # Approximate height after scaling
 
         # Position the machine so its bottom sits on the table
         machine_z = cls.z_lb + machine_height / 2
@@ -618,7 +618,7 @@ class PyBulletCoffeeEnv(PyBulletEnv, CoffeeEnv):
         """Get the z position of the jug."""
         if state.get(jug, "is_held") > 0.5:
             # If held, jug z is relative to robot position
-            robot, = state.get_objects(self._robot_type)
+            (robot,) = state.get_objects(self._robot_type)
             return state.get(robot, "z") - self.jug_handle_height
         else:
             # If not held, jug sits on the table

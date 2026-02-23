@@ -3,6 +3,7 @@ from typing import Callable, Dict, Sequence, Set, Tuple, cast
 
 import numpy as np
 from gym.spaces import Box
+from pybullet_utils.transformations import euler_from_quaternion
 
 from predicators import utils
 from predicators.pybullet_helpers.geometry import Pose
@@ -109,6 +110,83 @@ def create_move_end_effector_to_pose_option(
         target = target_pose.position
         squared_dist = np.sum(np.square(np.subtract(current, target)))
         return squared_dist < move_to_pose_tol
+
+    return ParameterizedOption(name,
+                               types=types,
+                               params_space=params_space,
+                               policy=_policy,
+                               initiable=lambda _1, _2, _3, _4: True,
+                               terminal=_terminal)
+
+
+def create_rotate_end_effector_option(
+    robot: SingleArmPyBulletRobot,
+    name: str,
+    types: Sequence[Type],
+    params_space: Box,
+    get_current_and_target_pose_and_finger_status: Callable[
+        [State, Sequence[Object], Array], Tuple[Pose, Pose, str]],
+    rotate_tol: float,
+    max_angular_vel: float,
+    finger_action_nudge_magnitude: float,
+) -> ParameterizedOption:
+    """A generic utility that creates a ParameterizedOption for rotating the
+    end effector about the z-axis only, by directly incrementing the last arm
+    joint (joint index left_finger_joint_idx - 1). No IK is used. The target
+    orientation must differ from the current one only in yaw."""
+
+    robot_name = robot.get_name()
+    assert robot_name in _SUPPORTED_ROBOTS, (
+        "Rotate end effector option " +
+        f"not implemented for robot {robot_name}.")
+
+    # Index of the last arm joint (the wrist rotation joint on the panda).
+    last_arm_joint_idx = robot.left_finger_joint_idx - 1
+
+    def _delta_yaw(current_orn: Tuple, target_orn: Tuple) -> float:
+        """Shortest-path yaw delta from current to target orientation."""
+        curr_yaw = euler_from_quaternion(current_orn)[2]
+        tgt_yaw = euler_from_quaternion(target_orn)[2]
+        return float((tgt_yaw - curr_yaw + np.pi) % (2 * np.pi) - np.pi)
+
+    def _policy(state: State, memory: Dict, objects: Sequence[Object],
+                params: Array) -> Action:
+        del memory  # unused
+        assert isinstance(state, utils.PyBulletState)
+        current_pose, target_pose, finger_status = \
+            get_current_and_target_pose_and_finger_status(
+                state, objects, params)
+        # Clamp the yaw step to max_angular_vel.
+        delta = _delta_yaw(current_pose.orientation, target_pose.orientation)
+        delta = np.clip(delta, -max_angular_vel, max_angular_vel)
+        # Start from the current joint positions and only change the last
+        # arm joint and the fingers.
+        joint_positions = list(state.joint_positions)
+        joint_positions[last_arm_joint_idx] += delta
+        # Handle the fingers. Fingers drift if left alone.
+        if finger_status == "open":
+            finger_delta = finger_action_nudge_magnitude
+        else:
+            assert finger_status == "closed"
+            finger_delta = -finger_action_nudge_magnitude
+        finger_position = state.joint_positions[robot.left_finger_joint_idx]
+        f_action = finger_position + finger_delta
+        joint_positions[robot.left_finger_joint_idx] = f_action
+        joint_positions[robot.right_finger_joint_idx] = f_action
+        action_arr = np.array(joint_positions, dtype=np.float32)
+        action_arr = np.clip(action_arr, robot.action_space.low,
+                             robot.action_space.high)
+        assert robot.action_space.contains(action_arr)
+        return Action(action_arr)
+
+    def _terminal(state: State, memory: Dict, objects: Sequence[Object],
+                  params: Array) -> bool:
+        del memory  # unused
+        current_pose, target_pose, _ = \
+            get_current_and_target_pose_and_finger_status(
+                state, objects, params)
+        delta = _delta_yaw(current_pose.orientation, target_pose.orientation)
+        return delta**2 < rotate_tol
 
     return ParameterizedOption(name,
                                types=types,

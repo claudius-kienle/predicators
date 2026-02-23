@@ -15,6 +15,7 @@ from predicators.structs import (
 utils.update_config(
     {
         "seed": 0,
+        "pybullet_robot": "panda",
         # "pybullet_sim_steps_per_action": 100,
     }
 )
@@ -95,7 +96,7 @@ def run_motion(motion: str):
         if cur_option.terminal(state):
             break
     assert cur_option.terminal(state), "Failed to execute the motion in the current state."
-
+    
 
 def _render():
     images = env.render()

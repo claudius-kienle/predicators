@@ -2,6 +2,7 @@
 
 import logging
 from typing import Any, ClassVar, Dict, List, Tuple
+from pybullet_utils.transformations import euler_from_quaternion, quaternion_from_euler
 
 import numpy as np
 import pybullet as p
@@ -25,19 +26,19 @@ class PyBulletCoffeeEnv(PyBulletEnv, CoffeeEnv):
     # Parameters that aren't important enough to need to clog up settings.py
 
     # Table parameters.
-    _table_pose: ClassVar[Pose3D] = (1.65, 0.75, 0.0)
+    _table_pose: ClassVar[Pose3D] = (1.45, 0.75, 0.2)
     _table_orientation: ClassVar[Quaternion] = (0.0, 0.0, 0.0, 1.0)
 
     # Override coordinate bounds from CoffeeEnv to use PyBullet-appropriate scales
     # (in meters, similar to PyBulletBlocksEnv).
-    x_lb: ClassVar[float] = 1.325
-    x_ub: ClassVar[float] = 1.375
+    x_lb: ClassVar[float] = 1.425
+    x_ub: ClassVar[float] = 1.475
     y_lb: ClassVar[float] = 0.4
     y_ub: ClassVar[float] = 1.1
     z_lb: ClassVar[float] = (
-        0.16  # Table surface height (table box height 0.4m, centered at z=0)
+        0.36  # Table surface height (table box height 0.4m, centered at z=0)
     )
-    z_ub: ClassVar[float] = 1.0  # Reduced from 1.5 to be reachable
+    z_ub: ClassVar[float] = 1.2  # Reduced from 1.5 to be reachable
 
     # Recompute derived values based on new bounds.
     robot_init_x: ClassVar[float] = (x_lb + x_ub) / 2.0
@@ -48,22 +49,22 @@ class PyBulletCoffeeEnv(PyBulletEnv, CoffeeEnv):
     machine_x_len: ClassVar[float] = 0.15
     machine_y_len: ClassVar[float] = 0.15
     machine_z_len: ClassVar[float] = 0.3
-    machine_x: ClassVar[float] = x_ub - machine_x_len / 2 + 0.45
+    machine_x: ClassVar[float] = x_ub + 0.1
     machine_y: ClassVar[float] = y_ub - machine_y_len / 2 - 0.55
 
     # Scale jug dimensions.
     jug_radius: ClassVar[float] = 0.04
-    jug_height: ClassVar[float] = 0.12
-    jug_init_x_lb: ClassVar[float] = machine_x - 0.2
-    jug_init_x_ub: ClassVar[float] = machine_x - 0.1
+    jug_height: ClassVar[float] = 0.13
+    jug_init_x_lb: ClassVar[float] = x_lb
+    jug_init_x_ub: ClassVar[float] = x_ub
     jug_init_y_lb: ClassVar[float] = machine_y + 0.2
     jug_init_y_ub: ClassVar[float] = machine_y + 0.6
     jug_handle_height: ClassVar[float] = 3 * jug_height / 4
 
     # Scale cup dimensions.
     cup_radius: ClassVar[float] = 0.03
-    cup_init_x_lb: ClassVar[float] = machine_x - 0.2
-    cup_init_x_ub: ClassVar[float] = machine_x - 0.1
+    cup_init_x_lb: ClassVar[float] = x_lb
+    cup_init_x_ub: ClassVar[float] = x_ub
     cup_init_y_lb: ClassVar[float] = machine_y + 0.2
     cup_init_y_ub: ClassVar[float] = machine_y + 0.6
     cup_capacity_lb: ClassVar[float] = 0.06
@@ -79,7 +80,7 @@ class PyBulletCoffeeEnv(PyBulletEnv, CoffeeEnv):
     dispense_area_y: ClassVar[float] = machine_y - 1.5 * jug_radius
 
     # Update tolerances for new scale.
-    grasp_position_tol: ClassVar[float] = 0.05
+    grasp_position_tol: ClassVar[float] = 0.0001
     dispense_tol: ClassVar[float] = 0.1
     pour_pos_tol: ClassVar[float] = 0.1
     init_padding: ClassVar[float] = 0.05
@@ -304,15 +305,18 @@ class PyBulletCoffeeEnv(PyBulletEnv, CoffeeEnv):
     def _extract_robot_state(self, state: State) -> Array:
         """Extract robot state from State for PyBullet."""
         # The orientation is fixed in this environment (no tilt in pybullet).
-        qx, qy, qz, qw = self.get_robot_ee_home_orn()
+        q = self.get_robot_ee_home_orn()
+        ex, ey, _ = euler_from_quaternion(q)
+        ez = state.get(self._robot, "wrist")  # Use wrist rotation from state
+        qx, qy, qz, qw = quaternion_from_euler(ex, ey, ez)
 
         # Map finger state: open_fingers corresponds to 1, closed to 0.
-        fingers = state.get(self._robot, "fingers")
+        f = state.get(self._robot, "fingers")
         # Normalize to PyBullet finger joint values.
-        if fingers > (self.open_fingers + self.closed_fingers) / 2:
-            f = self._pybullet_robot.open_fingers
-        else:
-            f = self._pybullet_robot.closed_fingers
+        # if fingers > (self.open_fingers + self.closed_fingers) / 2:
+        #     f = self._pybullet_robot.open_fingers
+        # else:
+        #     f = self._pybullet_robot.closed_fingers
 
         return np.array(
             [
@@ -426,20 +430,28 @@ class PyBulletCoffeeEnv(PyBulletEnv, CoffeeEnv):
         state_dict = {}
 
         # Get robot state.
-        rx, ry, rz, _, _, _, _, rf = self._pybullet_robot.get_state()
+        # rx, ry, rz, _, _, _, _, rf = self._pybullet_robot.get_state()
+        s = self._pybullet_robot.get_state()
+
+        rx, ry, rz = s[:3]
+        ex, ey, ez = euler_from_quaternion(s[3:7])
+        rf = s[-1]
+
 
         # Map PyBullet finger joint to state finger value.
-        open_f = self._pybullet_robot.open_fingers
-        closed_f = self._pybullet_robot.closed_fingers
-        if rf > (open_f + closed_f) / 2:
-            fingers = self.open_fingers
-        else:
-            fingers = self.closed_fingers
+        # open_f = self._pybullet_robot.open_fingers
+        # closed_f = self._pybullet_robot.closed_fingers
+        fingers = rf
+        # if rf > (open_f + closed_f) * 1 / 2:
+        #     fingers = self.open_fingers
+        # else:
+        #     fingers = self.closed_fingers
 
         # In the coffee env, robot also has tilt and wrist.
         # For PyBullet version, we keep these constant or derive from pose.
         tilt = self.tilt_lb  # Default to no tilt
-        wrist = self.robot_init_wrist  # Default wrist rotation
+        # wrist = self.robot_init_wrist  # Default wrist rotation
+        wrist = ez
 
         state_dict[self._robot] = np.array(
             [rx, ry, rz, tilt, wrist, fingers], dtype=np.float32
@@ -612,7 +624,8 @@ class PyBulletCoffeeEnv(PyBulletEnv, CoffeeEnv):
         open_f = pybullet_robot.open_fingers
         closed_f = pybullet_robot.closed_fingers
         threshold = (cls.open_fingers + cls.closed_fingers) / 2
-        return open_f if fingers_state > threshold else closed_f
+        # return open_f if fingers_state > threshold else closed_f
+        return fingers_state
 
     def _get_jug_z(self, state: State, jug: Object) -> float:
         """Get the z position of the jug."""

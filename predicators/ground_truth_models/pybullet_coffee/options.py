@@ -1,6 +1,11 @@
 """Ground-truth options for the pybullet_coffee environment."""
 
+from functools import partial
 from typing import ClassVar, Dict, List, Sequence, Set, Tuple
+from pybullet_utils.transformations import (
+    euler_from_quaternion,
+    quaternion_from_euler,
+)
 
 import numpy as np
 from gym.spaces import Box
@@ -11,6 +16,7 @@ from predicators.ground_truth_models import GroundTruthOptionFactory
 from predicators.pybullet_helpers.controllers import (
     create_change_fingers_option,
     create_move_end_effector_to_pose_option,
+    create_rotate_end_effector_option,
 )
 from predicators.pybullet_helpers.geometry import Pose
 from predicators.pybullet_helpers.robots import SingleArmPyBulletRobot
@@ -68,11 +74,14 @@ class PyBulletCoffeeGroundTruthOptionFactory(GroundTruthOptionFactory):
             return current, target
 
         def close_fingers_func(
-            state: State, objects: Sequence[Object], params: Array
+            state: State, objects: Sequence[Object], params: Array, percent: float
         ) -> Tuple[float, float]:
             del objects, params  # unused
             current = get_current_fingers(state)
-            target = pybullet_robot.closed_fingers
+            f_open = pybullet_robot.open_fingers
+            f_closed = pybullet_robot.closed_fingers
+            target = f_open + percent * (f_closed - f_open)
+
             return current, target
 
         # MoveToTwistJug - Move to above the jug to prepare for twisting
@@ -81,8 +90,18 @@ class PyBulletCoffeeGroundTruthOptionFactory(GroundTruthOptionFactory):
         MoveToTwistJug = utils.LinearChainParameterizedOption(
             "MoveToTwistJug",
             [
+                # move above jug
                 cls._create_coffee_move_to_jug_top_option(
                     name="MoveEndEffectorToJugTop",
+                    pybullet_robot=pybullet_robot,
+                    option_types=option_types,
+                    params_space=params_space,
+                ),
+                # move down around jug
+                cls._create_move_relative_to_jug_option(
+                    name="MoveEndEffectorDownToTwist",
+                    z_offset=-0.03,
+                    finger_status="open",
                     pybullet_robot=pybullet_robot,
                     option_types=option_types,
                     params_space=params_space,
@@ -93,10 +112,53 @@ class PyBulletCoffeeGroundTruthOptionFactory(GroundTruthOptionFactory):
         # RotateItemUntilHandleAccessible - Rotate the jug until handle is accessible
         option_types = [robot_type, jug_type]
         params_space = Box(0, 1, (0,))  # No parameters needed
-        RotateItemUntilHandleAccessible = cls._create_rotate_item_until_handle_accessible_option(
-            pybullet_robot=pybullet_robot,
-            option_types=option_types,
-            params_space=params_space,
+        RotateItemUntilHandleAccessible = utils.LinearChainParameterizedOption(
+            "RotateItemUntilHandleAccessible",
+            [
+                create_change_fingers_option(
+                    pybullet_robot,
+                    "CloseFingers",
+                    option_types,
+                    params_space,
+                    partial(close_fingers_func, percent=.25),
+                    CFG.pybullet_max_vel_norm,
+                    PyBulletCoffeeEnv.grasp_position_tol,
+                ),
+                # # Lift the jug
+                # cls._create_coffee_lift_jug(
+                #     name="LiftJug",
+                #     z_offset=0.1,
+                #     finger_status="closed",
+                #     pybullet_robot=pybullet_robot,
+                #     option_types=option_types,
+                #     params_space=params_space,
+                # ),
+                # rotate item
+                cls._create_rotate_item_until_handle_accessible_option(
+                    pybullet_robot=pybullet_robot,
+                    option_types=option_types,
+                    params_space=params_space,
+                ),
+                # open fingers
+                create_change_fingers_option(
+                    pybullet_robot,
+                    "OpenFingers",
+                    option_types,
+                    params_space,
+                    open_fingers_func,
+                    CFG.pybullet_max_vel_norm,
+                    PyBulletCoffeeEnv.grasp_position_tol,
+                ),
+                # move up
+                cls._create_move_relative_to_jug_option(
+                    name="MoveEndEffectorBackUp",
+                    z_offset=0.1,
+                    finger_status="open",
+                    pybullet_robot=pybullet_robot,
+                    option_types=option_types,
+                    params_space=params_space,
+                ),
+            ],
         )
 
         # PickJug - Pick up the jug by the handle
@@ -105,8 +167,15 @@ class PyBulletCoffeeGroundTruthOptionFactory(GroundTruthOptionFactory):
         PickJug = utils.LinearChainParameterizedOption(
             "PickJug",
             [
+                cls._create_rotate_to_abs_z_rotation(
+                    abs_z_rotation=0,
+                    pybullet_robot=pybullet_robot,
+                    option_types=option_types,
+                    params_space=params_space,
+                ),
+                # open fingers
                 # Move to above the jug handle
-                cls._create_coffee_move_to_jug_handle_option(
+                cls._create_move_to_jug_handle(
                     name="MoveEndEffectorToPreGraspJug",
                     z_offset=0.1,
                     finger_status="open",
@@ -125,9 +194,9 @@ class PyBulletCoffeeGroundTruthOptionFactory(GroundTruthOptionFactory):
                     PyBulletCoffeeEnv.grasp_position_tol,
                 ),
                 # Move to grasp the handle
-                cls._create_coffee_move_to_jug_handle_option(
+                cls._create_move_to_jug_handle(
                     name="MoveEndEffectorToGraspJug",
-                    z_offset=cls._offset_z,
+                    z_offset=0,
                     finger_status="open",
                     pybullet_robot=pybullet_robot,
                     option_types=option_types,
@@ -139,12 +208,12 @@ class PyBulletCoffeeGroundTruthOptionFactory(GroundTruthOptionFactory):
                     "CloseFingers",
                     option_types,
                     params_space,
-                    close_fingers_func,
+                    partial(close_fingers_func, percent=1.0),
                     CFG.pybullet_max_vel_norm,
                     PyBulletCoffeeEnv.grasp_position_tol,
                 ),
                 # Lift the jug
-                cls._create_coffee_move_to_jug_handle_option(
+                cls._create_coffee_lift_jug(
                     name="LiftJug",
                     z_offset=0.2,
                     finger_status="closed",
@@ -279,22 +348,19 @@ class PyBulletCoffeeGroundTruthOptionFactory(GroundTruthOptionFactory):
         params_space: Box,
     ) -> ParameterizedOption:
         """Move to the top of the jug for twisting."""
-        home_orn = PyBulletCoffeeEnv.get_robot_ee_home_orn()
-
         def _get_current_and_target_pose_and_finger_status(
             state: State, objects: Sequence[Object], params: Array
         ) -> Tuple[Pose, Pose, str]:
             del params  # unused
             robot, jug = objects
-            robot_x = state.get(robot, "x")
-            robot_y = state.get(robot, "y")
-            robot_z = state.get(robot, "z")
-            current_pose = Pose((robot_x, robot_y, robot_z), home_orn)
+            current_pose = cls.get_current_pose(state, robot)
 
             jug_x = state.get(jug, "x")
             jug_y = state.get(jug, "y")
-            jug_z = PyBulletCoffeeEnv.jug_height
-            target_pose = Pose((jug_x, jug_y, jug_z), home_orn)
+            jug_z = (
+                PyBulletCoffeeEnv.z_lb + PyBulletCoffeeEnv.jug_height + cls._offset_z
+            )
+            target_pose = Pose((jug_x, jug_y, jug_z), current_pose.orientation)
 
             return current_pose, target_pose, "open"
 
@@ -310,7 +376,22 @@ class PyBulletCoffeeGroundTruthOptionFactory(GroundTruthOptionFactory):
         )
 
     @classmethod
-    def _create_coffee_move_to_jug_handle_option(
+    def get_current_pose(cls, state: State, robot: Object) -> Pose:
+        """Helper function to get the current pose of the robot's end effector."""
+        robot_x = state.get(robot, "x")
+        robot_y = state.get(robot, "y")
+        robot_z = state.get(robot, "z")
+        ez = state.get(robot, "wrist")
+
+        home_orn = PyBulletCoffeeEnv.get_robot_ee_home_orn()
+        ex, ey, _ = euler_from_quaternion(home_orn)
+        current_pose = Pose(
+            (robot_x, robot_y, robot_z), tuple(quaternion_from_euler(ex, ey, ez))
+        )
+        return current_pose
+
+    @classmethod
+    def _create_move_to_jug_handle(
         cls,
         name: str,
         z_offset: float,
@@ -320,31 +401,103 @@ class PyBulletCoffeeGroundTruthOptionFactory(GroundTruthOptionFactory):
         params_space: Box,
     ) -> ParameterizedOption:
         """Move to the jug handle position with a specified z offset."""
-        home_orn = PyBulletCoffeeEnv.get_robot_ee_home_orn()
 
         def _get_current_and_target_pose_and_finger_status(
             state: State, objects: Sequence[Object], params: Array
         ) -> Tuple[Pose, Pose, str]:
             del params  # unused
             robot, jug = objects
-            robot_x = state.get(robot, "x")
-            robot_y = state.get(robot, "y")
-            robot_z = state.get(robot, "z")
-            current_pose = Pose((robot_x, robot_y, robot_z), home_orn)
+            current_pose = cls.get_current_pose(state, robot)
 
-            # Get jug handle position from CoffeeEnv logic
             jug_x = state.get(jug, "x")
             jug_y = state.get(jug, "y")
-            jug_rot = state.get(jug, "rot")
-            jug_radius = PyBulletCoffeeEnv.jug_radius
-            jug_handle_height = PyBulletCoffeeEnv.jug_handle_height
+            jug_z = PyBulletCoffeeEnv.z_lb + PyBulletCoffeeEnv.jug_height - 0.03  + z_offset
 
-            # Handle is at radius distance in the direction of rotation
-            handle_x = jug_x + jug_radius * np.cos(jug_rot + np.pi / 2)
-            handle_y = jug_y + jug_radius * np.sin(jug_rot + np.pi / 2)
-            handle_z = PyBulletCoffeeEnv.z_lb + jug_handle_height + z_offset
+            jug_x -= 0.04  # handle offset
+            jug_y += 0.02
 
-            target_pose = Pose((handle_x, handle_y, handle_z), home_orn)
+            target_pose = Pose((jug_x, jug_y, jug_z), current_pose.orientation)
+
+            return current_pose, target_pose, finger_status
+
+        return create_move_end_effector_to_pose_option(
+            pybullet_robot,
+            name,
+            option_types,
+            params_space,
+            _get_current_and_target_pose_and_finger_status,
+            cls._move_to_pose_tol,
+            CFG.pybullet_max_vel_norm,
+            cls._finger_action_nudge_magnitude,
+        )
+
+    @classmethod
+    def _create_coffee_lift_jug(
+        cls,
+        name: str,
+        z_offset: float,
+        finger_status: str,
+        pybullet_robot: SingleArmPyBulletRobot,
+        option_types: List[Type],
+        params_space: Box,
+    ) -> ParameterizedOption:
+        """Move to the jug handle position with a specified z offset."""
+        def _get_current_and_target_pose_and_finger_status(
+            state: State, objects: Sequence[Object], params: Array
+        ) -> Tuple[Pose, Pose, str]:
+            del params  # unused
+            robot, jug = objects
+            current_pose = cls.get_current_pose(state, robot)
+
+            robot_x = current_pose.position[0]
+            robot_y = current_pose.position[1]
+
+            jug_z = PyBulletCoffeeEnv.z_lb + PyBulletCoffeeEnv.jug_height + z_offset
+
+            target_pose = Pose((robot_x, robot_y, jug_z), current_pose.orientation)
+
+            return current_pose, target_pose, finger_status
+
+        return create_move_end_effector_to_pose_option(
+            pybullet_robot,
+            name,
+            option_types,
+            params_space,
+            _get_current_and_target_pose_and_finger_status,
+            cls._move_to_pose_tol,
+            CFG.pybullet_max_vel_norm,
+            cls._finger_action_nudge_magnitude,
+        )
+
+    @classmethod
+    def _create_move_relative_to_jug_option(
+        cls,
+        name: str,
+        z_offset: float,
+        finger_status: str,
+        pybullet_robot: SingleArmPyBulletRobot,
+        option_types: List[Type],
+        params_space: Box,
+    ) -> ParameterizedOption:
+        """Move to the jug handle position with a specified z offset."""
+        def _get_current_and_target_pose_and_finger_status(
+            state: State, objects: Sequence[Object], params: Array
+        ) -> Tuple[Pose, Pose, str]:
+            del params  # unused
+            robot, jug = objects
+            assert jug.name == "juggy"
+            current_pose = cls.get_current_pose(state, robot)
+
+            jug_x = state.get(jug, "x")
+            jug_y = state.get(jug, "y")
+            target_pose = Pose(
+                (
+                    jug_x,
+                    jug_y,
+                    PyBulletCoffeeEnv.z_lb + PyBulletCoffeeEnv.jug_height + z_offset,
+                ),
+                current_pose.orientation,
+            )
 
             return current_pose, target_pose, finger_status
 
@@ -370,18 +523,13 @@ class PyBulletCoffeeGroundTruthOptionFactory(GroundTruthOptionFactory):
         params_space: Box,
     ) -> ParameterizedOption:
         """Move to the dispense area of the coffee machine."""
-        home_orn = PyBulletCoffeeEnv.get_robot_ee_home_orn()
-
         def _get_current_and_target_pose_and_finger_status(
             state: State, objects: Sequence[Object], params: Array
         ) -> Tuple[Pose, Pose, str]:
             del params  # unused
             robot, jug, machine = objects
             del machine  # Position is fixed in env constants
-            robot_x = state.get(robot, "x")
-            robot_y = state.get(robot, "y")
-            robot_z = state.get(robot, "z")
-            current_pose = Pose((robot_x, robot_y, robot_z), home_orn)
+            current_pose = cls.get_current_pose(state, robot)
 
             # If jug is held, adjust z position accounting for handle
             if state.get(jug, "is_held") > 0.5:
@@ -395,7 +543,7 @@ class PyBulletCoffeeGroundTruthOptionFactory(GroundTruthOptionFactory):
                     PyBulletCoffeeEnv.dispense_area_y,
                     target_z,
                 ),
-                home_orn,
+                current_pose.orientation,
             )
 
             return current_pose, target_pose, finger_status
@@ -423,18 +571,13 @@ class PyBulletCoffeeGroundTruthOptionFactory(GroundTruthOptionFactory):
         params_space: Box,
     ) -> ParameterizedOption:
         """Move to the pour position above a cup."""
-        home_orn = PyBulletCoffeeEnv.get_robot_ee_home_orn()
-
         def _get_current_and_target_pose_and_finger_status(
             state: State, objects: Sequence[Object], params: Array
         ) -> Tuple[Pose, Pose, str]:
             del params  # unused
             robot, jug, cup = objects
             del jug  # Position derived from cup
-            robot_x = state.get(robot, "x")
-            robot_y = state.get(robot, "y")
-            robot_z = state.get(robot, "z")
-            current_pose = Pose((robot_x, robot_y, robot_z), home_orn)
+            current_pose = cls.get_current_pose(state, robot)
 
             cup_x = state.get(cup, "x")
             cup_y = state.get(cup, "y")
@@ -443,7 +586,7 @@ class PyBulletCoffeeGroundTruthOptionFactory(GroundTruthOptionFactory):
             pour_y = cup_y + PyBulletCoffeeEnv.pour_y_offset
             pour_z = z_offset + PyBulletCoffeeEnv.z_lb
 
-            target_pose = Pose((pour_x, pour_y, pour_z), home_orn)
+            target_pose = Pose((pour_x, pour_y, pour_z), current_pose.orientation)
 
             return current_pose, target_pose, finger_status
 
@@ -466,18 +609,13 @@ class PyBulletCoffeeGroundTruthOptionFactory(GroundTruthOptionFactory):
         params_space: Box,
     ) -> ParameterizedOption:
         """Create an option to press the machine button."""
-        home_orn = PyBulletCoffeeEnv.get_robot_ee_home_orn()
-
         def _get_current_and_target_pose_and_finger_status(
             state: State, objects: Sequence[Object], params: Array
         ) -> Tuple[Pose, Pose, str]:
             del params  # unused
             robot, machine = objects
             del machine  # Button position is fixed
-            robot_x = state.get(robot, "x")
-            robot_y = state.get(robot, "y")
-            robot_z = state.get(robot, "z")
-            current_pose = Pose((robot_x, robot_y, robot_z), home_orn)
+            current_pose = cls.get_current_pose(state, robot)
 
             target_pose = Pose(
                 (
@@ -485,7 +623,7 @@ class PyBulletCoffeeGroundTruthOptionFactory(GroundTruthOptionFactory):
                     PyBulletCoffeeEnv.button_y,
                     PyBulletCoffeeEnv.button_z,
                 ),
-                home_orn,
+                current_pose.orientation,
             )
 
             return current_pose, target_pose, "open"
@@ -502,6 +640,51 @@ class PyBulletCoffeeGroundTruthOptionFactory(GroundTruthOptionFactory):
         )
 
     @classmethod
+    def _create_rotate_to_abs_z_rotation(
+        cls,
+        abs_z_rotation: float,
+        pybullet_robot: SingleArmPyBulletRobot,
+        option_types: List[Type],
+        params_space: Box,
+    ) -> ParameterizedOption:
+        """Create an option to rotate the jug until its handle is accessible.
+
+        This option rotates the jug in place so that the handle faces the robot,
+        making it easier to grasp.
+        """
+        def _get_current_and_target_pose_and_finger_status(
+            state: State, objects: Sequence[Object], params: Array
+        ) -> Tuple[Pose, Pose, str]:
+            del params  # unused
+            robot, _ = objects
+            current_pose = cls.get_current_pose(state, robot)
+            ex, ey, ez = euler_from_quaternion(current_pose.orientation)
+
+            goal_rot_jug = abs_z_rotation
+            delta_rot = -(goal_rot_jug - ez)
+            print(delta_rot)
+            if abs(delta_rot - np.pi) < 0.02 or abs(delta_rot) < 0.02:
+                delta_rot = 0
+
+            goal_euler = (ex, ey, ez + delta_rot)
+            goal_orn = quaternion_from_euler(*goal_euler)
+
+            target_pose = Pose(current_pose.position, goal_orn.tolist())
+
+            return current_pose, target_pose, "closed"
+
+        return create_rotate_end_effector_option(
+            pybullet_robot,
+            "RotateItem",
+            option_types,
+            params_space,
+            _get_current_and_target_pose_and_finger_status,
+            cls._move_to_pose_tol,
+            0.3,
+            cls._finger_action_nudge_magnitude,
+        )
+
+    @classmethod
     def _create_rotate_item_until_handle_accessible_option(
         cls,
         pybullet_robot: SingleArmPyBulletRobot,
@@ -513,50 +696,44 @@ class PyBulletCoffeeGroundTruthOptionFactory(GroundTruthOptionFactory):
         This option rotates the jug in place so that the handle faces the robot,
         making it easier to grasp.
         """
-        home_orn = PyBulletCoffeeEnv.get_robot_ee_home_orn()
-        rotation_speed = 0.5  # Radians per step
-
-        def _policy(
-            state: State, memory: Dict, objects: Sequence[Object], params: Array
-        ) -> Action:
-            # Rotate the jug by applying force/torque or by direct manipulation
-            # For now, maintain position as rotation would need physics manipulation
+        def _get_current_and_target_pose_and_finger_status(
+            state: State, objects: Sequence[Object], params: Array
+        ) -> Tuple[Pose, Pose, str]:
+            del params  # unused
             robot, jug = objects
-            current_joints = state.simulator_state
-            return Action(np.array(current_joints, dtype=np.float32))
+            current_pose = cls.get_current_pose(state, robot)
 
-        def _terminal(
-            state: State, memory: Dict, objects: Sequence[Object], params: Array
-        ) -> bool:
-            # Check if handle is accessible (facing the robot)
-            robot, jug = objects
-            robot_x = state.get(robot, "x")
-            robot_y = state.get(robot, "y")
-            jug_x = state.get(jug, "x")
-            jug_y = state.get(jug, "y")
             jug_rot = state.get(jug, "rot")
-            
-            # Vector from jug to robot
-            dx = robot_x - jug_x
-            dy = robot_y - jug_y
-            angle_to_robot = np.arctan2(dy, dx)
-            
-            # Handle is at jug_rot + pi/2
-            handle_angle = jug_rot + np.pi / 2
-            
-            # Normalize angles to [-pi, pi]
-            angle_diff = np.abs(((angle_to_robot - handle_angle + np.pi) % (2 * np.pi)) - np.pi)
-            
-            # Terminal if handle is roughly facing the robot (within 30 degrees)
-            return angle_diff < np.pi / 6
 
-        return ParameterizedOption(
-            "RotateItemUntilHandleAccessible",
-            types=option_types,
-            params_space=params_space,
-            policy=_policy,
-            initiable=lambda s, m, o, p: True,
-            terminal=_terminal,
+            goal_rot_jug = np.pi
+
+            delta_rot = -(goal_rot_jug - jug_rot + np.pi) % (2 * np.pi) - np.pi
+
+            from pybullet_utils.transformations import (
+                euler_from_quaternion,
+                quaternion_from_euler,
+            )
+
+            curr_euler = euler_from_quaternion(current_pose.orientation)
+            goal_euler = (curr_euler[0], curr_euler[1], curr_euler[2] + delta_rot)
+            goal_orn = quaternion_from_euler(*goal_euler)
+
+            target_pose = Pose(
+                current_pose.position,
+                goal_orn.tolist(),
+            )
+
+            return current_pose, target_pose, "closed"
+
+        return create_rotate_end_effector_option(
+            pybullet_robot,
+            "RotateItem",
+            option_types,
+            params_space,
+            _get_current_and_target_pose_and_finger_status,
+            cls._move_to_pose_tol,
+            0.3,
+            cls._finger_action_nudge_magnitude,
         )
 
     @classmethod

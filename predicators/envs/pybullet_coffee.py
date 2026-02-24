@@ -1,12 +1,13 @@
 """A PyBullet version of Coffee."""
 
 import logging
-from typing import Any, ClassVar, Dict, List, Tuple
+from typing import Any, ClassVar, Dict, List, Optional, Tuple
 from pybullet_utils.transformations import euler_from_quaternion, quaternion_from_euler
 
 import numpy as np
 import pybullet as p
 import pybullet_data
+from PIL import Image, ImageDraw
 
 from predicators import utils
 from predicators.envs.coffee import CoffeeEnv
@@ -24,17 +25,18 @@ class PyBulletCoffeeEnv(PyBulletEnv, CoffeeEnv):
     """PyBullet Coffee domain."""
 
     # Parameters that aren't important enough to need to clog up settings.py
+    _finger_action_tol: ClassVar[float] = 5e-4
 
     # Table parameters.
-    _table_pose: ClassVar[Pose3D] = (1.45, 0.75, 0.2)
+    _table_pose: ClassVar[Pose3D] = (1.35, 0.75, 0.2)
     _table_orientation: ClassVar[Quaternion] = (0.0, 0.0, 0.0, 1.0)
 
     # Override coordinate bounds from CoffeeEnv to use PyBullet-appropriate scales
     # (in meters, similar to PyBulletBlocksEnv).
-    x_lb: ClassVar[float] = 1.425
-    x_ub: ClassVar[float] = 1.475
-    y_lb: ClassVar[float] = 0.4
-    y_ub: ClassVar[float] = 1.1
+    x_lb: ClassVar[float] = 1.325
+    x_ub: ClassVar[float] = 1.375
+    y_lb: ClassVar[float] = 0.3
+    y_ub: ClassVar[float] = 1.0
     z_lb: ClassVar[float] = (
         0.36  # Table surface height (table box height 0.4m, centered at z=0)
     )
@@ -57,7 +59,7 @@ class PyBulletCoffeeEnv(PyBulletEnv, CoffeeEnv):
     jug_height: ClassVar[float] = 0.13
     jug_init_x_lb: ClassVar[float] = x_lb
     jug_init_x_ub: ClassVar[float] = x_ub
-    jug_init_y_lb: ClassVar[float] = machine_y + 0.2
+    jug_init_y_lb: ClassVar[float] = machine_y + 0.4
     jug_init_y_ub: ClassVar[float] = machine_y + 0.6
     jug_handle_height: ClassVar[float] = 3 * jug_height / 4
 
@@ -66,14 +68,21 @@ class PyBulletCoffeeEnv(PyBulletEnv, CoffeeEnv):
     cup_init_x_lb: ClassVar[float] = x_lb
     cup_init_x_ub: ClassVar[float] = x_ub
     cup_init_y_lb: ClassVar[float] = machine_y + 0.2
-    cup_init_y_ub: ClassVar[float] = machine_y + 0.6
+    cup_init_y_ub: ClassVar[float] = machine_y + 0.4
     cup_capacity_lb: ClassVar[float] = 0.06
-    cup_capacity_ub: ClassVar[float] = 0.12
+    cup_capacity_ub: ClassVar[float] = 0.13
+    cup_liquid_radius_scale: ClassVar[float] = 0.8
+    cup_liquid_min_height: ClassVar[float] = 0.002
+
+    jug_liquid_radius_scale: ClassVar[float] = 0.6
+    jug_liquid_height_scale: ClassVar[float] = 0.35
+    liquid_color: ClassVar[Tuple[float, float, float, float]] = (0.36, 0.2, 0.08, 0.9)
 
     # Recompute button position.
-    button_x: ClassVar[float] = machine_x
-    button_y: ClassVar[float] = machine_y - machine_y_len / 2
-    button_z: ClassVar[float] = z_lb + 3 * machine_z_len / 4
+    button_x: ClassVar[float] = machine_x - 0.07
+    button_y: ClassVar[float] = machine_y
+    button_z: ClassVar[float] = z_lb + 0.15
+    button_radius: ClassVar[float] = 0.02
 
     # Dispense area.
     dispense_area_x: ClassVar[float] = machine_x
@@ -88,14 +97,22 @@ class PyBulletCoffeeEnv(PyBulletEnv, CoffeeEnv):
 
     # Update simulation parameters.
     pour_x_offset: ClassVar[float] = 1.5 * (cup_radius + jug_radius)
-    pour_y_offset: ClassVar[float] = cup_radius
-    pour_z_offset: ClassVar[float] = 1.1 * (
+    pour_y_offset: ClassVar[float] = -0.015
+    pour_z_offset: ClassVar[float] = 1.4 * (
         cup_capacity_ub + jug_height - jug_handle_height
-    )
+    ) + z_lb
+    tilt_ub: ClassVar[float] = np.pi / 6
+    pour_tilt_angle: ClassVar[float] = tilt_ub
     pour_velocity: ClassVar[float] = cup_capacity_ub / 10.0
     max_position_vel: ClassVar[float] = 0.25
     max_angular_vel: ClassVar[float] = np.pi / 4  # Same as tilt_ub from parent
     max_finger_vel: ClassVar[float] = 0.1
+
+    # Camera parameters.
+    _camera_yaw: ClassVar[float] = -20.0
+    _camera_pitch: ClassVar[float] = -40
+    _camera_distance: ClassVar[float] = 0.8
+    _camera_target: ClassVar[Pose3D] = ((x_lb + x_ub) / 2.0, (y_lb + y_ub) / 2.0, 0.32)
 
     def __init__(self, use_gui: bool = True) -> None:
         super().__init__(use_gui)
@@ -130,7 +147,7 @@ class PyBulletCoffeeEnv(PyBulletEnv, CoffeeEnv):
         p.changeVisualShape(
             table_id,
             -1,
-            rgbaColor=[0.6, 0.4, 0.2, 1.0],
+            rgbaColor=[0.9, 0.9, 0.9, 1.0],
             physicsClientId=physics_client_id,
         )
         bodies["table_id"] = table_id
@@ -177,6 +194,11 @@ class PyBulletCoffeeEnv(PyBulletEnv, CoffeeEnv):
         # Create jug.
         jug_id = cls._create_coffee_jug(physics_client_id)
         bodies["jug_id"] = jug_id
+        bodies["jug_liquid_id"] = cls._create_liquid_body(
+            radius=cls.jug_radius * cls.jug_liquid_radius_scale,
+            height=cls.jug_height * cls.jug_liquid_height_scale,
+            physics_client_id=physics_client_id,
+        )
 
         # Create cups. Note that we create the maximum number once, and then
         # later on, in reset_state(), we will remove cups from the workspace
@@ -188,6 +210,17 @@ class PyBulletCoffeeEnv(PyBulletEnv, CoffeeEnv):
             cup_id = cls._create_coffee_cup(color, physics_client_id)
             cup_ids.append(cup_id)
         bodies["cup_ids"] = cup_ids
+        cup_liquid_ids = []
+        cup_liquid_radius = cls.cup_radius * cls.cup_liquid_radius_scale
+        for _ in range(num_cups):
+            cup_liquid_ids.append(
+                cls._create_liquid_body(
+                    radius=cup_liquid_radius,
+                    height=cls.cup_liquid_min_height,
+                    physics_client_id=physics_client_id,
+                )
+            )
+        bodies["cup_liquid_ids"] = cup_liquid_ids
 
         return physics_client_id, pybullet_robot, bodies
 
@@ -197,14 +230,13 @@ class PyBulletCoffeeEnv(PyBulletEnv, CoffeeEnv):
         # Load the SAPIEN coffee machine URDF
         # The URDF has rotation applied and bounding box: min=[-0.52, -0.68, -0.59], max=[0.52, 0.69, 0.84]
         # With globalScaling=0.1, the height is ~0.14m
-        scale = 0.20
-        machine_height = 0.18 * scale / 0.1  # Approximate height after scaling
+        scale = 0.006
 
         # Position the machine so its bottom sits on the table
-        machine_z = cls.z_lb + machine_height / 2
+        machine_z = cls.z_lb + 0.04
 
         machine_id = p.loadURDF(
-            utils.get_env_asset_path("urdf/coffee_machine/103046/mobility.urdf"),
+            utils.get_env_asset_path("urdf/coffee_machine/custom/machine.urdf"),
             basePosition=[cls.machine_x, cls.machine_y, machine_z],
             baseOrientation=cls._default_orn,
             useFixedBase=True,
@@ -286,11 +318,33 @@ class PyBulletCoffeeEnv(PyBulletEnv, CoffeeEnv):
 
         return cup_id
 
+    @classmethod
+    def _create_liquid_body(
+        cls, radius: float, height: float, physics_client_id: int
+    ) -> int:
+        visual_id = p.createVisualShape(
+            p.GEOM_CYLINDER,
+            radius=radius,
+            length=height,
+            rgbaColor=cls.liquid_color,
+            physicsClientId=physics_client_id,
+        )
+        return p.createMultiBody(
+            baseMass=0.0,
+            baseCollisionShapeIndex=-1,
+            baseVisualShapeIndex=visual_id,
+            basePosition=[0.0, 0.0, -10.0],
+            baseOrientation=cls._default_orn,
+            physicsClientId=physics_client_id,
+        )
+
     def _store_pybullet_bodies(self, pybullet_bodies: Dict[str, Any]) -> None:
         self._table_id = pybullet_bodies["table_id"]
         self._machine_id = pybullet_bodies["machine_id"]
         self._jug_id = pybullet_bodies["jug_id"]
+        self._jug_liquid_id = pybullet_bodies["jug_liquid_id"]
         self._cup_ids = pybullet_bodies["cup_ids"]
+        self._cup_liquid_ids = pybullet_bodies["cup_liquid_ids"]
 
     @classmethod
     def _create_pybullet_robot(cls, physics_client_id: int) -> SingleArmPyBulletRobot:
@@ -356,24 +410,7 @@ class PyBulletCoffeeEnv(PyBulletEnv, CoffeeEnv):
             physicsClientId=self._physics_client_id,
         )
 
-        # Update jug color based on whether it's filled.
-        jug_filled = state.get(self._jug, "is_filled") > 0.5
         jug_held = state.get(self._jug, "is_held") > 0.5
-        if jug_filled and jug_held:
-            color = [0.0, 0.0, 0.6, 1.0]  # Dark blue
-        elif jug_filled:
-            color = [0.5, 0.7, 1.0, 1.0]  # Light blue
-        elif jug_held:
-            color = [0.0, 0.5, 0.0, 1.0]  # Dark green
-        else:
-            color = [0.7, 0.9, 0.7, 1.0]  # Light green
-
-        p.changeVisualShape(
-            self._jug_id,
-            linkIndex=-1,
-            rgbaColor=color,
-            physicsClientId=self._physics_client_id,
-        )
 
         # Reset cups based on the state.
         cup_objs = state.get_objects(self._cup_type)
@@ -416,6 +453,8 @@ class PyBulletCoffeeEnv(PyBulletEnv, CoffeeEnv):
                 physicsClientId=self._physics_client_id,
             )
 
+            self._update_liquid_visuals(state)
+
         # Assert that the state was properly reconstructed.
         reconstructed_state = self._get_state()
         if not reconstructed_state.allclose(state):
@@ -437,7 +476,6 @@ class PyBulletCoffeeEnv(PyBulletEnv, CoffeeEnv):
         ex, ey, ez = euler_from_quaternion(s[3:7])
         rf = s[-1]
 
-
         # Map PyBullet finger joint to state finger value.
         # open_f = self._pybullet_robot.open_fingers
         # closed_f = self._pybullet_robot.closed_fingers
@@ -449,7 +487,8 @@ class PyBulletCoffeeEnv(PyBulletEnv, CoffeeEnv):
 
         # In the coffee env, robot also has tilt and wrist.
         # For PyBullet version, we keep these constant or derive from pose.
-        tilt = self.tilt_lb  # Default to no tilt
+        # tilt = self.tilt_lb  # Default to no tilt
+        tilt = ey
         # wrist = self.robot_init_wrist  # Default wrist rotation
         wrist = ez
 
@@ -551,19 +590,242 @@ class PyBulletCoffeeEnv(PyBulletEnv, CoffeeEnv):
 
         if jug_in_machine and machine_on:
             self._jug_filled_state = 1.0
-            # Update jug color.
-            p.changeVisualShape(
-                self._jug_id,
-                linkIndex=-1,
-                rgbaColor=[0.5, 0.7, 1.0, 1.0],
-                physicsClientId=self._physics_client_id,
-            )
+
+        # Check for pouring: jug must be held and tilted to tilt_ub.
+        jug_held = self._Holding_holds(next_state, [self._robot, self._jug])
+        jug_filled = (
+            self._jug_filled_state > 0.5
+            if hasattr(self, "_jug_filled_state")
+            else False
+        )
+        if jug_held and jug_filled:
+            tilt = next_state.get(self._robot, "tilt")
+            if abs(abs(tilt) - self.tilt_ub) < self.pour_angle_tol:
+                cup = self._get_cup_to_pour(next_state)
+                if cup is not None:
+                    current_liquid = next_state.get(cup, "current_liquid")
+                    new_liquid = current_liquid + self.pour_velocity
+                    capacity = next_state.get(cup, "capacity_liquid")
+                    if new_liquid <= capacity:
+                        # Update the live observation so _get_state() picks up
+                        # this change via _current_state.
+                        self._current_observation.set(
+                            cup, "current_liquid", new_liquid
+                        )
 
         # Update the current observation with modified state variables.
         # We need to rebuild the state with updated values.
         self._current_observation = self._get_state()
+        self._update_liquid_visuals(self._current_observation)
 
         return self._current_observation.copy()
+
+    def render(
+        self, action: Optional[Action] = None, caption: Optional[str] = None
+    ) -> List[np.ndarray]:  # pragma: no cover
+        del action, caption  # unused
+
+        view_matrix = p.computeViewMatrixFromYawPitchRoll(
+            cameraTargetPosition=self._camera_target,
+            distance=self._camera_distance,
+            yaw=self._camera_yaw,
+            pitch=self._camera_pitch,
+            roll=0,
+            upAxisIndex=2,
+            physicsClientId=self._physics_client_id,
+        )
+
+        width = CFG.pybullet_camera_width
+        height = CFG.pybullet_camera_height
+
+        proj_matrix = p.computeProjectionMatrixFOV(
+            fov=60,
+            aspect=float(width / height),
+            nearVal=0.1,
+            farVal=100.0,
+            physicsClientId=self._physics_client_id,
+        )
+
+        (_, _, px, _, _) = p.getCameraImage(
+            width=width,
+            height=height,
+            viewMatrix=view_matrix,
+            projectionMatrix=proj_matrix,
+            renderer=p.ER_BULLET_HARDWARE_OPENGL,
+            physicsClientId=self._physics_client_id,
+        )
+
+        rgb_array = np.array(px).reshape((height, width, 4))[:, :, :3]
+
+        obj_to_body_id = self._get_render_label_body_map()
+        if obj_to_body_id:
+            pil_img = Image.fromarray(rgb_array.astype(np.uint8), mode="RGB")
+            draw = ImageDraw.Draw(pil_img)
+            view = np.array(view_matrix, dtype=np.float64).reshape((4, 4), order="F")
+            proj = np.array(proj_matrix, dtype=np.float64).reshape((4, 4), order="F")
+            view_proj = proj @ view
+
+            for obj, body_id in obj_to_body_id.items():
+                if obj == self._robot:
+                    robot_base_pos = p.getBasePositionAndOrientation(
+                        self._pybullet_robot.robot_id,
+                        physicsClientId=self._physics_client_id,
+                    )[0]
+                    label_pos = (
+                        float(robot_base_pos[0]),
+                        float(robot_base_pos[1]),
+                        float(robot_base_pos[2]),
+                    )
+                else:
+                    label_pos = self._get_body_center(body_id)
+                pixel_xy = self._project_point_to_pixel(
+                    point_world=label_pos,
+                    width=width,
+                    height=height,
+                    view_proj_matrix=view_proj,
+                )
+                if pixel_xy is None:
+                    continue
+                px_x, px_y = pixel_xy
+                text = str(obj)
+                text_bbox = draw.textbbox((px_x, px_y), text)
+                pad = 2
+                bg_box = (
+                    text_bbox[0] - pad,
+                    text_bbox[1] - pad,
+                    text_bbox[2] + pad,
+                    text_bbox[3] + pad,
+                )
+                draw.rectangle(bg_box, fill=(0, 0, 0))
+                draw.text((px_x, px_y), text, fill=(255, 255, 255))
+
+            table_text = "table:table"
+            table_bbox = draw.textbbox((0, 0), table_text)
+            table_w = table_bbox[2] - table_bbox[0]
+            table_h = table_bbox[3] - table_bbox[1]
+            table_x = int((width - table_w) / 2) + 20
+            table_y = max(0, height - table_h - 20)
+            pad = 2
+            table_bg = (
+                table_x - pad,
+                table_y - pad,
+                table_x + table_w + pad,
+                table_y + table_h + pad,
+            )
+            draw.rectangle(table_bg, fill=(0, 0, 0))
+            draw.text((table_x, table_y), table_text, fill=(255, 255, 255))
+
+            rgb_array = np.array(pil_img)
+
+        return [rgb_array]
+
+    def _get_render_label_body_map(self) -> Dict[Object, int]:
+        """Map each Coffee object to its corresponding PyBullet body ID."""
+        obj_to_body_id: Dict[Object, int] = {
+            self._robot: self._pybullet_robot.robot_id,
+            self._machine: self._machine_id,
+            self._jug: self._jug_id,
+        }
+        for cup_id, cup_obj in self._cup_id_to_cup.items():
+            obj_to_body_id[cup_obj] = cup_id
+        return obj_to_body_id
+
+    def _get_body_center(self, body_id: int) -> Tuple[float, float, float]:
+        """Get the geometric center of a body from its axis-aligned bounds."""
+        aabb_min, aabb_max = p.getAABB(body_id, physicsClientId=self._physics_client_id)
+        center = (np.array(aabb_min) + np.array(aabb_max)) / 2.0
+        return float(center[0]), float(center[1]), float(center[2])
+
+    def _project_point_to_pixel(
+        self,
+        point_world: Tuple[float, float, float],
+        width: int,
+        height: int,
+        view_proj_matrix: np.ndarray,
+    ) -> Optional[Tuple[int, int]]:
+        """Project a world-space point into image pixel coordinates."""
+        point_h = np.array([point_world[0], point_world[1], point_world[2], 1.0])
+        clip = view_proj_matrix @ point_h
+        w = clip[3]
+        if abs(w) < 1e-8:
+            return None
+
+        ndc = clip[:3] / w
+        if ndc[2] < -1.0 or ndc[2] > 1.0:
+            return None
+
+        px_x = int((ndc[0] * 0.5 + 0.5) * width)
+        px_y = int((1.0 - (ndc[1] * 0.5 + 0.5)) * height)
+        if px_x < 0 or px_x >= width or px_y < 0 or px_y >= height:
+            return None
+        return px_x, px_y
+
+    def _update_liquid_visuals(self, state: State) -> None:
+        """Update cup and jug liquid visuals from symbolic state values."""
+        oov_x, oov_y = self._out_of_view_xy
+
+        jug_filled = state.get(self._jug, "is_filled") > 0.5
+        if jug_filled:
+            (jug_x, jug_y, jug_z), jug_orn = p.getBasePositionAndOrientation(
+                self._jug_id, physicsClientId=self._physics_client_id
+            )
+            liquid_z = jug_z + 0.04 - 0.1 * self.jug_height
+            p.resetBasePositionAndOrientation(
+                self._jug_liquid_id,
+                [jug_x, jug_y + 0.02, liquid_z],
+                jug_orn,
+                physicsClientId=self._physics_client_id,
+            )
+        else:
+            p.resetBasePositionAndOrientation(
+                self._jug_liquid_id,
+                [oov_x, oov_y, -10.0],
+                self._default_orn,
+                physicsClientId=self._physics_client_id,
+            )
+
+        for cup_idx, cup_id in enumerate(self._cup_ids):
+            liquid_id = self._cup_liquid_ids[cup_idx]
+            cup_obj = self._cup_id_to_cup.get(cup_id)
+            if cup_obj is None:
+                p.resetBasePositionAndOrientation(
+                    liquid_id,
+                    [oov_x, oov_y, -10.0],
+                    self._default_orn,
+                    physicsClientId=self._physics_client_id,
+                )
+                continue
+
+            capacity = state.get(cup_obj, "capacity_liquid")
+            current = state.get(cup_obj, "current_liquid")
+            if capacity <= 0 or current <= 0:
+                p.resetBasePositionAndOrientation(
+                    liquid_id,
+                    [oov_x, oov_y, -10.0],
+                    self._default_orn,
+                    physicsClientId=self._physics_client_id,
+                )
+                continue
+
+            fill_ratio = np.clip(current / capacity, 0.0, 1.0)
+            liquid_height = max(fill_ratio * capacity, self.cup_liquid_min_height)
+            (cup_x, cup_y, _), cup_orn = p.getBasePositionAndOrientation(
+                cup_id, physicsClientId=self._physics_client_id
+            )
+            liquid_z = self.z_lb + 0.07 + liquid_height / 2.0
+
+            p.changeVisualShape(
+                liquid_id,
+                linkIndex=-1,
+                rgbaColor=self.liquid_color,
+                physicsClientId=self._physics_client_id,
+            )
+            p.resetBasePositionAndOrientation(
+                liquid_id,
+                [cup_x, cup_y, liquid_z],
+                cup_orn,
+                physicsClientId=self._physics_client_id,
+            )
 
     def simulate(self, state: State, action: Action) -> State:
         """Use the CoffeeEnv simulate logic for abstract planning."""
@@ -587,7 +849,8 @@ class PyBulletCoffeeEnv(PyBulletEnv, CoffeeEnv):
         """Get expected finger normals for grasping."""
         if CFG.pybullet_robot == "panda":
             # Gripper rotated 90deg so parallel to x-axis.
-            normal = np.array([1.0, 0.0, 0.0], dtype=np.float32)
+            # normal = np.array([1., 0., 0.], dtype=np.float32)
+            normal = np.array([0.0, 1.0, 0.0], dtype=np.float32)
         elif CFG.pybullet_robot == "fetch":
             # Gripper parallel to y-axis.
             normal = np.array([0.0, 1.0, 0.0], dtype=np.float32)

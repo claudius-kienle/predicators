@@ -1,0 +1,102 @@
+<?xml version="1.0"?>
+<robot name="coffee_machine">
+
+  <!-- Base: Machine Bottom -->
+  <link name="machine_bottom">
+    <visual>
+      <geometry>
+          <mesh filename="bottom.obj"/>
+      </geometry>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <material name="black">
+        <color rgba="0.1 0.1 0.1 1"/>
+      </material>
+    </visual>
+    <collision>
+      <geometry>
+          <mesh filename="bottom.obj"/>
+      </geometry>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+    </collision>
+  </link>
+
+  <!-- Machine Back -->
+  <link name="machine_back">
+    <visual>
+      <geometry>
+          <mesh filename="back.obj"/>
+      </geometry>
+      <origin xyz="0 0 0.6" rpy="0 0 -1.5707"/>
+      <material name="black">
+        <color rgba="0.1 0.1 0.1 1"/>
+      </material>
+    </visual>
+    <collision>
+      <geometry>
+          <mesh filename="back.obj"/>
+      </geometry>
+      <origin xyz="0 0 0.6" rpy="0 0 -1.5707"/>
+    </collision>
+  </link>
+
+  <!-- Machine Top -->
+  <link name="machine_top">
+    <visual>
+      <geometry>
+          <mesh filename="top.obj"/>
+      </geometry>
+      <origin xyz="0 0 1.2" rpy="0 0 0"/>
+      <material name="black">
+        <color rgba="0.1 0.1 0.1 1"/>
+      </material>
+    </visual>
+    <collision>
+      <geometry>
+          <mesh filename="top.obj"/>
+      </geometry>
+      <origin xyz="0 0 1.2" rpy="0 0 0"/>
+    </collision>
+  </link>
+
+  <!-- Fixed joints to connect the body parts -->
+  <joint name="back_to_bottom" type="fixed">
+    <parent link="machine_back"/>
+    <child link="machine_bottom"/>
+    <origin xyz="0 8 +1" rpy="0 0 0"/>
+  </joint>
+
+  <joint name="back_to_top" type="fixed">
+    <parent link="machine_back"/>
+    <child link="machine_top"/>
+    <origin xyz="20 8 -1" rpy="0 0 0"/>
+  </joint>
+
+  <!-- Button -->
+  <link name="power_button">
+    <visual>
+      <geometry>
+          <mesh filename="button.obj"/>
+      </geometry>
+      <origin xyz="0 0 0"/>
+      <material name="green">
+        <color rgba="0 1 0 1"/>
+      </material>
+    </visual>
+    <collision>
+      <geometry>
+          <mesh filename="button.obj"/>
+      </geometry>
+      <origin xyz="0 0 0"/>
+    </collision>
+  </link>
+
+  <!-- Button Joint -->
+  <joint name="button_joint" type="prismatic">
+    <parent link="machine_top"/> 
+    <child link="power_button"/>
+    <origin xyz="-5 -10 0" rpy="0 0 -1.5707"/>
+    <axis xyz="0 -1 0"/>
+    <limit lower="0.0" upper="0.01" effort="10" velocity="0.1"/>
+  </joint>
+
+</robot>

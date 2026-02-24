@@ -10,8 +10,15 @@ from gym.spaces import Box
 from predicators import utils
 from predicators.envs import BaseEnv
 from predicators.settings import CFG
-from predicators.structs import Action, EnvironmentTask, GroundAtom, Object, \
-    Predicate, State, Type
+from predicators.structs import (
+    Action,
+    EnvironmentTask,
+    GroundAtom,
+    Object,
+    Predicate,
+    State,
+    Type,
+)
 
 
 class CoffeeEnv(BaseEnv):
@@ -61,10 +68,12 @@ class CoffeeEnv(BaseEnv):
     jug_height: ClassVar[float] = 0.15 * (z_ub - z_lb)
     jug_init_x_lb: ClassVar[float] = machine_x - machine_x_len + init_padding
     jug_init_x_ub: ClassVar[float] = machine_x + machine_x_len - init_padding
-    jug_init_y_lb: ClassVar[float] = y_lb + jug_radius + pick_jug_y_padding + \
-                                     init_padding
-    jug_init_y_ub: ClassVar[
-        float] = machine_y - machine_y_len - jug_radius - init_padding
+    jug_init_y_lb: ClassVar[float] = (
+        y_lb + jug_radius + pick_jug_y_padding + init_padding
+    )
+    jug_init_y_ub: ClassVar[float] = (
+        machine_y - machine_y_len - jug_radius - init_padding
+    )
     jug_handle_offset: ClassVar[float] = 1.05 * jug_radius
     jug_handle_height: ClassVar[float] = 3 * jug_height / 4
     jug_handle_radius: ClassVar[float] = 1e-1  # just for rendering
@@ -74,8 +83,9 @@ class CoffeeEnv(BaseEnv):
     # Cup settings.
     cup_radius: ClassVar[float] = 0.6 * jug_radius
     cup_init_x_lb: ClassVar[float] = x_lb + cup_radius + init_padding
-    cup_init_x_ub: ClassVar[
-        float] = machine_x - machine_x_len - cup_radius - init_padding
+    cup_init_x_ub: ClassVar[float] = (
+        machine_x - machine_x_len - cup_radius - init_padding
+    )
     cup_init_y_lb: ClassVar[float] = jug_init_y_lb
     cup_init_y_ub: ClassVar[float] = jug_init_y_ub
     cup_capacity_lb: ClassVar[float] = 0.075 * (z_ub - z_lb)
@@ -84,8 +94,9 @@ class CoffeeEnv(BaseEnv):
     # Simulation settings.
     pour_x_offset: ClassVar[float] = 1.5 * (cup_radius + jug_radius)
     pour_y_offset: ClassVar[float] = cup_radius
-    pour_z_offset: ClassVar[float] = 1.1 * (cup_capacity_ub + jug_height - \
-                                            jug_handle_height)
+    pour_z_offset: ClassVar[float] = 1.1 * (
+        cup_capacity_ub + jug_height - jug_handle_height
+    )
     pour_velocity: ClassVar[float] = cup_capacity_ub / 10.0
     max_position_vel: ClassVar[float] = 2.5
     max_angular_vel: ClassVar[float] = tilt_ub
@@ -95,49 +106,57 @@ class CoffeeEnv(BaseEnv):
         super().__init__(use_gui)
 
         # Types
-        self._robot_type = Type("robot",
-                                ["x", "y", "z", "tilt", "wrist", "fingers"])
+        self._robot_type = Type("robot", ["x", "y", "z", "tilt", "wrist", "fingers"])
         self._jug_type = Type("jug", ["x", "y", "rot", "is_held", "is_filled"])
         self._machine_type = Type("machine", ["is_on"])
         self._cup_type = Type(
-            "cup",
-            ["x", "y", "capacity_liquid", "target_liquid", "current_liquid"])
+            "cup", ["x", "y", "capacity_liquid", "target_liquid", "current_liquid"]
+        )
 
         # Predicates
-        self._CupFilled = Predicate("CupFilled", [self._cup_type],
-                                    self._CupFilled_holds)
-        self._Holding = Predicate("Holding",
-                                  [self._robot_type, self._jug_type],
-                                  self._Holding_holds)
-        self._JugInMachine = Predicate("JugInMachine",
-                                       [self._jug_type, self._machine_type],
-                                       self._JugInMachine_holds)
-        self._MachineOn = Predicate("MachineOn", [self._machine_type],
-                                    self._MachineOn_holds)
-        self._OnTable = Predicate("OnTable", [self._jug_type],
-                                  self._OnTable_holds)
-        self._HandEmpty = Predicate("HandEmpty", [self._robot_type],
-                                    self._HandEmpty_holds)
-        self._JugFilled = Predicate("JugFilled", [self._jug_type],
-                                    self._JugFilled_holds)
-        self._RobotAboveCup = Predicate("RobotAboveCup",
-                                        [self._robot_type, self._cup_type],
-                                        self._RobotAboveCup_holds)
-        self._JugAboveCup = Predicate("JugAboveCup",
-                                      [self._jug_type, self._cup_type],
-                                      self._JugAboveCup_holds)
-        self._NotAboveCup = Predicate("NotAboveCup",
-                                      [self._robot_type, self._jug_type],
-                                      self._NotAboveCup_holds)
-        self._Twisting = Predicate("Twisting",
-                                   [self._robot_type, self._jug_type],
-                                   self._Twisting_holds)
+        self._CupFilled = Predicate(
+            "CupFilled", [self._cup_type], self._CupFilled_holds
+        )
+        self._Holding = Predicate(
+            "Holding", [self._robot_type, self._jug_type], self._Holding_holds
+        )
+        self._JugInMachine = Predicate(
+            "JugInMachine",
+            [self._jug_type, self._machine_type],
+            self._JugInMachine_holds,
+        )
+        self._MachineOn = Predicate(
+            "MachineOn", [self._machine_type], self._MachineOn_holds
+        )
+        self._OnTable = Predicate("OnTable", [self._jug_type], self._OnTable_holds)
+        self._HandEmpty = Predicate(
+            "HandEmpty", [self._robot_type], self._HandEmpty_holds
+        )
+        self._JugFilled = Predicate(
+            "JugFilled", [self._jug_type], self._JugFilled_holds
+        )
+        self._RobotAboveCup = Predicate(
+            "RobotAboveCup",
+            [self._robot_type, self._cup_type],
+            self._RobotAboveCup_holds,
+        )
+        self._JugAboveCup = Predicate(
+            "JugAboveCup", [self._jug_type, self._cup_type], self._JugAboveCup_holds
+        )
+        self._NotAboveCup = Predicate(
+            "NotAboveCup", [self._robot_type, self._jug_type], self._NotAboveCup_holds
+        )
+        self._Twisting = Predicate(
+            "Twisting", [self._robot_type, self._jug_type], self._Twisting_holds
+        )
         self._PressingButton = Predicate(
-            "PressingButton", [self._robot_type, self._machine_type],
-            self._PressingButton_holds)
-        self._NotSameCup = Predicate("NotSameCup",
-                                     [self._cup_type, self._cup_type],
-                                     self._NotSameCup_holds)
+            "PressingButton",
+            [self._robot_type, self._machine_type],
+            self._PressingButton_holds,
+        )
+        self._NotSameCup = Predicate(
+            "NotSameCup", [self._cup_type, self._cup_type], self._NotSameCup_holds
+        )
 
         # Static objects (always exist no matter the settings).
         self._robot = Object("robby", self._robot_type)
@@ -154,8 +173,7 @@ class CoffeeEnv(BaseEnv):
     def simulate(self, state: State, action: Action) -> State:
         assert self.action_space.contains(action.arr)
         next_state = state.copy()
-        norm_dx, norm_dy, norm_dz, norm_dtilt, norm_dwrist, norm_dfingers = \
-            action.arr
+        norm_dx, norm_dy, norm_dz, norm_dtilt, norm_dwrist, norm_dfingers = action.arr
         # Denormalize the action.
         dx = norm_dx * self.max_position_vel
         dy = norm_dy * self.max_position_vel
@@ -175,8 +193,9 @@ class CoffeeEnv(BaseEnv):
         current_wrist = state.get(self._robot, "wrist")
         wrist = np.clip(current_wrist + dwrist, self.wrist_lb, self.wrist_ub)
         current_fingers = state.get(self._robot, "fingers")
-        fingers = np.clip(current_fingers + dfingers, self.closed_fingers,
-                          self.open_fingers)
+        fingers = np.clip(
+            current_fingers + dfingers, self.closed_fingers, self.open_fingers
+        )
         # The deltas may be outdated because of the clipping, so recompute
         # or delete them.
         dx = x - state.get(self._robot, "x")
@@ -192,12 +211,13 @@ class CoffeeEnv(BaseEnv):
         next_state.set(self._robot, "fingers", fingers)
         # Get jug state info for later checks.
         handle_pos = self._get_jug_handle_grasp(state, self._jug)
-        sq_dist_to_handle = np.sum(np.subtract(handle_pos, (x, y, z))**2)
+        sq_dist_to_handle = np.sum(np.subtract(handle_pos, (x, y, z)) ** 2)
         jug_rot = state.get(self._jug, "rot")
         # Check if the button should be pressed for the first time.
         machine_was_on = self._MachineOn_holds(state, [self._machine])
         pressing_button = self._PressingButton_holds(
-            next_state, [self._robot, self._machine])
+            next_state, [self._robot, self._machine]
+        )
         jug_held = self._Holding_holds(state, [self._robot, self._jug])
         if pressing_button and not machine_was_on:
             next_state.set(self._machine, "is_on", 1.0)
@@ -243,9 +263,11 @@ class CoffeeEnv(BaseEnv):
                     next_state.set(self._robot, "wrist", self.robot_init_wrist)
                     next_state.set(self._robot, "fingers", self.closed_fingers)
         # Check if the jug should be grasped for the first time.
-        elif abs(fingers - self.closed_fingers) < self.grasp_finger_tol and \
-            sq_dist_to_handle < self.grasp_position_tol and \
-            abs(jug_rot) < self.pick_jug_rot_tol:
+        elif (
+            abs(fingers - self.closed_fingers) < self.grasp_finger_tol
+            and sq_dist_to_handle < self.grasp_position_tol
+            and abs(jug_rot) < self.pick_jug_rot_tol
+        ):
             # Snap to the handle.
             handle_x, handle_y, handle_z = handle_pos
             next_state.set(self._robot, "x", handle_x)
@@ -262,30 +284,44 @@ class CoffeeEnv(BaseEnv):
             next_state.set(self._jug, "rot", rot + dwrist)
         # If the jug is close enough to the dispense area and the machine is
         # on, the jug should get filled.
-        jug_in_machine = self._JugInMachine_holds(next_state,
-                                                  [self._jug, self._machine])
+        jug_in_machine = self._JugInMachine_holds(
+            next_state, [self._jug, self._machine]
+        )
         machine_on = self._MachineOn_holds(next_state, [self._machine])
         if jug_in_machine and machine_on:
             next_state.set(self._jug, "is_filled", 1.0)
         return next_state
 
     def _generate_train_tasks(self) -> List[EnvironmentTask]:
-        return self._get_tasks(num=CFG.num_train_tasks,
-                               num_cups_lst=CFG.coffee_num_cups_train,
-                               rng=self._train_rng)
+        return self._get_tasks(
+            num=CFG.num_train_tasks,
+            num_cups_lst=CFG.coffee_num_cups_train,
+            rng=self._train_rng,
+        )
 
     def _generate_test_tasks(self) -> List[EnvironmentTask]:
-        return self._get_tasks(num=CFG.num_test_tasks,
-                               num_cups_lst=CFG.coffee_num_cups_test,
-                               rng=self._test_rng)
+        return self._get_tasks(
+            num=CFG.num_test_tasks,
+            num_cups_lst=CFG.coffee_num_cups_test,
+            rng=self._test_rng,
+        )
 
     @property
     def predicates(self) -> Set[Predicate]:
         return {
-            self._CupFilled, self._JugInMachine, self._Holding,
-            self._MachineOn, self._OnTable, self._HandEmpty, self._JugFilled,
-            self._RobotAboveCup, self._JugAboveCup, self._NotAboveCup,
-            self._PressingButton, self._Twisting, self._NotSameCup
+            self._CupFilled,
+            self._JugInMachine,
+            self._Holding,
+            self._MachineOn,
+            self._OnTable,
+            self._HandEmpty,
+            self._JugFilled,
+            self._RobotAboveCup,
+            self._JugAboveCup,
+            self._NotAboveCup,
+            self._PressingButton,
+            self._Twisting,
+            self._NotSameCup,
         }
 
     @property
@@ -294,24 +330,22 @@ class CoffeeEnv(BaseEnv):
 
     @property
     def types(self) -> Set[Type]:
-        return {
-            self._cup_type, self._jug_type, self._machine_type,
-            self._robot_type
-        }
+        return {self._cup_type, self._jug_type, self._machine_type, self._robot_type}
 
     @property
     def action_space(self) -> Box:
         # Normalized dx, dy, dz, dtilt, dwrist, dfingers.
-        return Box(low=-1., high=1., shape=(6, ), dtype=np.float32)
+        return Box(low=-1.0, high=1.0, shape=(6,), dtype=np.float32)
 
     def render_state_plt(
-            self,
-            state: State,
-            task: EnvironmentTask,
-            action: Optional[Action] = None,
-            caption: Optional[str] = None) -> matplotlib.figure.Figure:
+        self,
+        state: State,
+        task: EnvironmentTask,
+        action: Optional[Action] = None,
+        caption: Optional[str] = None,
+    ) -> matplotlib.figure.Figure:
         del caption  # unused
-        fig_width = (2 * (self.x_ub - self.x_lb))
+        fig_width = 2 * (self.x_ub - self.x_lb)
         fig_height = max((self.y_ub - self.y_lb), (self.z_ub - self.z_lb))
         fig_size = (fig_width, fig_height)
         fig, axes = plt.subplots(1, 2, figsize=fig_size)
@@ -327,40 +361,38 @@ class CoffeeEnv(BaseEnv):
             circ = utils.Circle(x, y, self.cup_radius)
             circ.plot(xy_ax, facecolor=color, edgecolor="black")
             # Cups are cylinders, so in the xz plane, they look like rects.
-            rect = utils.Rectangle(x=x,
-                                   y=z,
-                                   width=(self.cup_radius * 2),
-                                   height=capacity,
-                                   theta=0)
+            rect = utils.Rectangle(
+                x=x, y=z, width=(self.cup_radius * 2), height=capacity, theta=0
+            )
             rect.plot(xz_ax, facecolor=color, edgecolor="black")
             # Draw an inner rect to represent the filled level.
             if current > 0:
-                rect = utils.Rectangle(x=x,
-                                       y=z,
-                                       width=(self.cup_radius * 2),
-                                       height=current,
-                                       theta=0)
+                rect = utils.Rectangle(
+                    x=x, y=z, width=(self.cup_radius * 2), height=current, theta=0
+                )
                 rect.plot(xz_ax, facecolor="lightblue", edgecolor="black")
         # Draw the machine.
         color = "gray"
-        rect = utils.Rectangle(x=self.machine_x,
-                               y=self.machine_y,
-                               width=self.machine_x_len,
-                               height=self.machine_y_len,
-                               theta=0.0)
+        rect = utils.Rectangle(
+            x=self.machine_x,
+            y=self.machine_y,
+            width=self.machine_x_len,
+            height=self.machine_y_len,
+            theta=0.0,
+        )
         rect.plot(xy_ax, facecolor=color, edgecolor="black")
-        rect = utils.Rectangle(x=self.machine_x,
-                               y=self.z_lb,
-                               width=self.machine_x_len,
-                               height=self.machine_z_len,
-                               theta=0.0)
+        rect = utils.Rectangle(
+            x=self.machine_x,
+            y=self.z_lb,
+            width=self.machine_x_len,
+            height=self.machine_z_len,
+            theta=0.0,
+        )
         rect.plot(xz_ax, facecolor=color, edgecolor="black")
         # Draw a button on the machine (xz plane only).
         machine_on = self._MachineOn_holds(state, [self._machine])
         color = "red" if machine_on else "brown"
-        circ = utils.Circle(x=self.button_x,
-                            y=self.button_z,
-                            radius=self.button_radius)
+        circ = utils.Circle(x=self.button_x, y=self.button_z, radius=self.button_radius)
         circ.plot(xz_ax, facecolor=color, edgecolor="black")
         # Draw the jug.
         jug_full = self._JugFilled_holds(state, [self._jug])
@@ -378,11 +410,13 @@ class CoffeeEnv(BaseEnv):
         circ = utils.Circle(x=x, y=y, radius=self.jug_radius)
         circ.plot(xy_ax, facecolor=color, edgecolor="black")
         # The jug is a cylinder, so in the xz plane it looks like a rect.
-        rect = utils.Rectangle(x=(x - self.jug_radius),
-                               y=z,
-                               width=(2 * self.jug_radius),
-                               height=self.jug_height,
-                               theta=0.0)
+        rect = utils.Rectangle(
+            x=(x - self.jug_radius),
+            y=z,
+            width=(2 * self.jug_radius),
+            height=self.jug_height,
+            theta=0.0,
+        )
         # Rotate if held.
         if jug_held:
             tilt = state.get(self._robot, "tilt")
@@ -397,16 +431,11 @@ class CoffeeEnv(BaseEnv):
             handle_y = state.get(self._robot, "y")
             handle_z = state.get(self._robot, "z")
         else:
-            handle_x, handle_y, handle_z = self._get_jug_handle_grasp(
-                state, self._jug)
+            handle_x, handle_y, handle_z = self._get_jug_handle_grasp(state, self._jug)
         color = "darkgray"
-        circ = utils.Circle(x=handle_x,
-                            y=handle_y,
-                            radius=self.jug_handle_radius)
+        circ = utils.Circle(x=handle_x, y=handle_y, radius=self.jug_handle_radius)
         circ.plot(xy_ax, facecolor=color, edgecolor="black")
-        circ = utils.Circle(x=handle_x,
-                            y=handle_z,
-                            radius=self.jug_handle_radius)
+        circ = utils.Circle(x=handle_x, y=handle_z, radius=self.jug_handle_radius)
         circ.plot(xz_ax, facecolor=color, edgecolor="black")
         # Draw the robot.
         color = "gold"
@@ -414,15 +443,11 @@ class CoffeeEnv(BaseEnv):
         y = state.get(self._robot, "y")
         z = state.get(self._robot, "z")
         circ = utils.Circle(
-            x=x,
-            y=y,
-            radius=self.cup_radius  # robot in reality has no 'radius'
+            x=x, y=y, radius=self.cup_radius  # robot in reality has no 'radius'
         )
         circ.plot(xy_ax, facecolor=color, edgecolor="black")
         circ = utils.Circle(
-            x=x,
-            y=z,
-            radius=self.cup_radius  # robot in reality has no 'radius'
+            x=x, y=z, radius=self.cup_radius  # robot in reality has no 'radius'
         )
         circ.plot(xz_ax, facecolor=color, edgecolor="black")
         ax_pad = 0.5
@@ -437,8 +462,9 @@ class CoffeeEnv(BaseEnv):
         plt.tight_layout()
         return fig
 
-    def _get_tasks(self, num: int, num_cups_lst: List[int],
-                   rng: np.random.Generator) -> List[EnvironmentTask]:
+    def _get_tasks(
+        self, num: int, num_cups_lst: List[int], rng: np.random.Generator
+    ) -> List[EnvironmentTask]:
         tasks = []
         # Create the parts of the initial state that do not change between
         # tasks, which includes the robot and the machine.
@@ -485,8 +511,7 @@ class CoffeeEnv(BaseEnv):
                         break
                     collision_geoms.add(gm)
                     # Sample a cup capacity, which also defines its height.
-                    cap = rng.uniform(self.cup_capacity_lb,
-                                      self.cup_capacity_ub)
+                    cap = rng.uniform(self.cup_capacity_lb, self.cup_capacity_ub)
                     # Target liquid amount for filling the cup.
                     target = cap * self.cup_target_frac
                     # The initial liquid amount is always 0.
@@ -516,7 +541,7 @@ class CoffeeEnv(BaseEnv):
                 "y": y,
                 "rot": rot,
                 "is_held": 0.0,  # jug starts off not held
-                "is_filled": 0.0  # jug starts off empty
+                "is_filled": 0.0,  # jug starts off empty
             }
             init_state = utils.create_state_from_dict(state_dict)
             task = EnvironmentTask(init_state, goal)
@@ -525,7 +550,7 @@ class CoffeeEnv(BaseEnv):
 
     @staticmethod
     def _CupFilled_holds(state: State, objects: Sequence[Object]) -> bool:
-        cup, = objects
+        (cup,) = objects
         current = state.get(cup, "current_liquid")
         target = state.get(cup, "target_liquid")
         return current > target
@@ -535,8 +560,7 @@ class CoffeeEnv(BaseEnv):
         _, jug = objects
         return state.get(jug, "is_held") > 0.5
 
-    def _JugInMachine_holds(self, state: State,
-                            objects: Sequence[Object]) -> bool:
+    def _JugInMachine_holds(self, state: State, objects: Sequence[Object]) -> bool:
         jug, _ = objects
         if self._Holding_holds(state, [self._robot, jug]):
             return False
@@ -545,16 +569,16 @@ class CoffeeEnv(BaseEnv):
         y = state.get(jug, "y")
         z = self._get_jug_z(state, jug)
         jug_pos = (x, y, z)
-        sq_dist_to_dispense = np.sum(np.subtract(dispense_pos, jug_pos)**2)
+        sq_dist_to_dispense = np.sum(np.subtract(dispense_pos, jug_pos) ** 2)
         return sq_dist_to_dispense < self.dispense_tol
 
     @staticmethod
     def _MachineOn_holds(state: State, objects: Sequence[Object]) -> bool:
-        machine, = objects
+        (machine,) = objects
         return state.get(machine, "is_on") > 0.5
 
     def _OnTable_holds(self, state: State, objects: Sequence[Object]) -> bool:
-        jug, = objects
+        (jug,) = objects
         if self._Holding_holds(state, [self._robot, jug]):
             return False
         return not self._JugInMachine_holds(state, [jug, self._machine])
@@ -570,38 +594,34 @@ class CoffeeEnv(BaseEnv):
         # To prevent false positives, if the distance to the handle is less
         # than the distance to the jug top, we are not twisting.
         handle_pos = self._get_jug_handle_grasp(state, jug)
-        sq_dist_to_handle = np.sum(np.subtract(handle_pos, (x, y, z))**2)
-        sq_dist_to_jug_top = np.sum(np.subtract(jug_top, (x, y, z))**2)
+        sq_dist_to_handle = np.sum(np.subtract(handle_pos, (x, y, z)) ** 2)
+        sq_dist_to_jug_top = np.sum(np.subtract(jug_top, (x, y, z)) ** 2)
         if sq_dist_to_handle < sq_dist_to_jug_top:
             return False
         return sq_dist_to_jug_top < self.grasp_position_tol
 
-    def _HandEmpty_holds(self, state: State,
-                         objects: Sequence[Object]) -> bool:
-        robot, = objects
+    def _HandEmpty_holds(self, state: State, objects: Sequence[Object]) -> bool:
+        (robot,) = objects
         if self._Twisting_holds(state, [robot, self._jug]):
             return False
         return not self._Holding_holds(state, [robot, self._jug])
 
     @staticmethod
     def _JugFilled_holds(state: State, objects: Sequence[Object]) -> bool:
-        jug, = objects
+        (jug,) = objects
         return state.get(jug, "is_filled") > 0.5
 
-    def _RobotAboveCup_holds(self, state: State,
-                             objects: Sequence[Object]) -> bool:
+    def _RobotAboveCup_holds(self, state: State, objects: Sequence[Object]) -> bool:
         robot, cup = objects
         assert robot == self._robot
         return self._robot_jug_above_cup(state, cup)
 
-    def _JugAboveCup_holds(self, state: State,
-                           objects: Sequence[Object]) -> bool:
+    def _JugAboveCup_holds(self, state: State, objects: Sequence[Object]) -> bool:
         jug, cup = objects
         assert jug == self._jug
         return self._robot_jug_above_cup(state, cup)
 
-    def _NotAboveCup_holds(self, state: State,
-                           objects: Sequence[Object]) -> bool:
+    def _NotAboveCup_holds(self, state: State, objects: Sequence[Object]) -> bool:
         robot, jug = objects
         assert robot == self._robot
         assert jug == self._jug
@@ -610,15 +630,14 @@ class CoffeeEnv(BaseEnv):
                 return False
         return True
 
-    def _PressingButton_holds(self, state: State,
-                              objects: Sequence[Object]) -> bool:
+    def _PressingButton_holds(self, state: State, objects: Sequence[Object]) -> bool:
         robot, _ = objects
         button_pos = (self.button_x, self.button_y, self.button_z)
         x = state.get(robot, "x")
         y = state.get(robot, "y")
         z = state.get(robot, "z")
-        sq_dist_to_button = np.sum(np.subtract(button_pos, (x, y, z))**2)
-        return sq_dist_to_button < self.button_radius
+        sq_dist_to_button = np.sum(np.subtract(button_pos, (x, y, z)) ** 2)
+        return sq_dist_to_button ** (1 / 2) < self.button_radius
 
     @staticmethod
     def _NotSameCup_holds(state: State, objects: Sequence[Object]) -> bool:
@@ -634,12 +653,13 @@ class CoffeeEnv(BaseEnv):
         jug_z = state.get(self._robot, "z") - self.jug_handle_height
         jug_pos = (jug_x, jug_y, jug_z)
         pour_pos = self._get_pour_position(state, cup)
-        sq_dist_to_pour = np.sum(np.subtract(jug_pos, pour_pos)**2)
+        sq_dist_to_pour = np.sum(np.subtract(jug_pos, pour_pos) ** 2)
         return sq_dist_to_pour < self.pour_pos_tol
 
     @classmethod
-    def _get_jug_handle_grasp(cls, state: State,
-                              jug: Object) -> Tuple[float, float, float]:
+    def _get_jug_handle_grasp(
+        cls, state: State, jug: Object
+    ) -> Tuple[float, float, float]:
         # Orient pointing down.
         rot = state.get(jug, "rot") - np.pi / 2
         target_x = state.get(jug, "x") + np.cos(rot) * cls.jug_handle_offset
@@ -647,8 +667,9 @@ class CoffeeEnv(BaseEnv):
         target_z = cls.jug_handle_height
         return (target_x, target_y, target_z)
 
-    def _get_pour_position(self, state: State,
-                           cup: Object) -> Tuple[float, float, float]:
+    def _get_pour_position(
+        self, state: State, cup: Object
+    ) -> Tuple[float, float, float]:
         target_x = state.get(cup, "x") + self.pour_x_offset
         target_y = state.get(cup, "y") + self.pour_y_offset
         target_z = self.pour_z_offset
@@ -663,7 +684,7 @@ class CoffeeEnv(BaseEnv):
         closest_cup_dist = float("inf")
         for cup in state.get_objects(self._cup_type):
             target = self._get_pour_position(state, cup)
-            sq_dist = np.sum(np.subtract(jug_pos, target)**2)
+            sq_dist = np.sum(np.subtract(jug_pos, target) ** 2)
             if sq_dist < self.pour_pos_tol and sq_dist < closest_cup_dist:
                 closest_cup = cup
                 closest_cup_dist = sq_dist

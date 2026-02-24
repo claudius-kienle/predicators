@@ -2,6 +2,7 @@ import numpy as np
 from PIL import Image
 from predicators import utils
 from predicators.envs import create_new_env
+from predicators.envs.coffee import CoffeeEnv
 from predicators.ground_truth_models import get_gt_options
 from predicators.structs import (
     _Option,
@@ -17,6 +18,8 @@ utils.update_config(
         "seed": 0,
         "pybullet_robot": "panda",
         # "pybullet_sim_steps_per_action": 100,
+        "pybullet_camera_width": 640,
+        "pybullet_camera_height": 480,
     }
 )
 env = create_new_env("pybullet_coffee", do_cache=True, use_gui=True)
@@ -86,17 +89,21 @@ def run_motion(motion: str):
     all_objs = list(state.data.keys())
     all_objs = {obj.name: obj for obj in all_objs}
 
-    objects = [all_objs[arg] for arg in motion_args]
+    motion_objs = [all_objs[arg] for arg in motion_args]
 
     # run motion
-    cur_option = _sample_option_from_nsrt(option, objects, state, set(), set())
+    cur_option = _sample_option_from_nsrt(option, motion_objs, state, set(), set())
     for _ in range(100):
         act = cur_option.policy(state)
         state = env.step(act)
         if cur_option.terminal(state):
             break
-    assert cur_option.terminal(state), "Failed to execute the motion in the current state."
-    
+    assert cur_option.terminal(
+        state
+    ), "Failed to execute the motion in the current state."
+
+    _render()
+
 
 def _render():
     images = env.render()
@@ -111,6 +118,16 @@ def main():
     run_motion("RotateItemUntilHandleAccessible('robby', 'juggy')")
     _render()
     run_motion("PickJug('robby', 'juggy')")
+    _render()
+    run_motion("PlaceJugInMachine('robby', 'juggy', 'coffee_machine')")
+    _render()
+    run_motion("TurnMachineOn('robby', 'coffee_machine')")
+    _render()
+    run_motion("PickJug('robby', 'juggy')")
+    _render()
+    run_motion("Pour('robby', 'juggy', 'cup0')")
+    _render()
+    run_motion("Pour('robby', 'juggy', 'cup1')")
     _render()
 
 

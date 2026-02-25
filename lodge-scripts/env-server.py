@@ -1,4 +1,5 @@
 import json
+import os
 
 import numpy as np
 from PIL import Image
@@ -12,6 +13,7 @@ import io
 import pickle
 from pathlib import Path
 
+from predicators.envs.pybullet_coffee import PyBulletCoffeeEnv
 from predicators.ground_truth_models import get_gt_nsrts, get_gt_options
 from predicators.option_model import create_option_model
 from predicators.structs import (
@@ -22,6 +24,8 @@ from predicators.structs import (
     ParameterizedOption,
     State,
 )
+
+assert os.environ.get("PYTHONHASHSEED") == "0"
 
 
 class StateStorage:
@@ -69,13 +73,26 @@ def image_to_base64(image: Image.Image) -> str:
     return base64.b64encode(img_byte_arr.getvalue()).decode("utf-8")
 
 
-def remap_state_to_dict(state: State) -> dict[str, dict[str, float]]:
+def remap_state_to_dict(
+    state: State, env_name: str | None = None
+) -> dict[str, dict[str, float | bool]]:
     """Remap state features into a dict for each object."""
     result = {}
     for obj in state.data:
         feature_dict = {}
         for i, feature_name in enumerate(obj.type.feature_names):
             feature_dict[feature_name] = state.data[obj][i]
+
+        if env_name == "pybullet_coffee":
+            if obj.type.name == "robot":
+                feature_dict.pop("tilt", None)
+                feature_dict.pop("wrist", None)
+            if obj.type.name == "jug" and "rot" in feature_dict:
+                rot = float(feature_dict.pop("rot"))
+                feature_dict["handle_accessible"] = abs(rot - np.pi) < 0.1
+        else:
+            raise NotImplementedError(f"Unknown environment name {env_name}")
+
         result[f"{obj.name}:{obj.type.name}"] = feature_dict
     return result
 
@@ -86,15 +103,20 @@ app = FastAPI()
 utils.update_config(
     {
         "seed": 0,
+        "pybullet_robot": "panda",
+        # "pybullet_sim_steps_per_action": 100,
+        "pybullet_camera_width": 640,
+        "pybullet_camera_height": 480,
     }
 )
-env = create_new_env("pybullet_coffee", do_cache=True, use_gui=False)
+env: PyBulletCoffeeEnv = create_new_env("pybullet_coffee", do_cache=True, use_gui=False)  # type: ignore
 
 states = StateStorage()
 
 
 def _get_curr_state() -> State:
     return env._current_observation
+
 
 def _get_image() -> Image.Image:
     try:
@@ -146,16 +168,21 @@ def get_env_hash() -> str:
 
 @app.post("/set-env-hash", operation_id="set_env_hash")
 def set_env_hash(s_hash: str):
+    return
     s = states[s_hash]
+    assert s is not None, f"State with hash {s_hash} not found in storage."
     env._current_observation = s
+    env._reset_state(s)
+
+    _get_image().save("image2.png")
 
     assert _get_curr_hash() == s_hash
 
 
 @app.get("/state", operation_id="get_state")
-def get_state() -> dict[str, dict[str, float]]:
+def get_state() -> dict[str, dict[str, float | bool]]:
     state = env.get_observation()
-    return remap_state_to_dict(state)
+    return remap_state_to_dict(state, env.get_name())
 
 
 @app.get("/image", operation_id="get_image")
@@ -240,7 +267,8 @@ def run_motion(motion: str) -> RunMotionResponseModel:
     options = get_gt_options(env.get_name())
     option = next((opt for opt in options if opt.name == motion_name))
 
-    state = _get_curr_state()
+    init_state = _get_curr_state()
+    state = init_state.copy()
     all_objs = list(state.data.keys())
     all_objs = {obj.name: obj for obj in all_objs}
 
@@ -249,8 +277,16 @@ def run_motion(motion: str) -> RunMotionResponseModel:
     try:
         # run motion
         cur_option = _sample_option_from_nsrt(option, objects, state, set(), set())
-        act = cur_option.policy(state)
-        env.step(act)
+        for _ in range(100):
+            act = cur_option.policy(state)
+            state = env.step(act)
+            if cur_option.terminal(state):
+                break
+        if not cur_option.terminal(state):
+            # raise RuntimeError("Failed to execute the motion in the current state.")
+            print("Warning: Option did not terminate within 100 steps. Forcing termination.")
+            env._current_observation = init_state
+            env._reset_state(init_state)
 
     except RuntimeError as e:
         # TODO: reset environment
@@ -264,6 +300,7 @@ def run_motion(motion: str) -> RunMotionResponseModel:
     post_state = _get_curr_hash()
 
     print("State changed: %s -> %s" % (prev_state, post_state))
+    _get_image().save("image2.png")
 
     return RunMotionResponseModel(error_response=None)
 

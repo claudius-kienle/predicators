@@ -360,7 +360,8 @@ class PyBulletCoffeeEnv(PyBulletEnv, CoffeeEnv):
         """Extract robot state from State for PyBullet."""
         # The orientation is fixed in this environment (no tilt in pybullet).
         q = self.get_robot_ee_home_orn()
-        ex, ey, _ = euler_from_quaternion(q)
+        ex, _, _ = euler_from_quaternion(q)
+        ey = state.get(self._robot, "tilt")  # Use tilt from state
         ez = state.get(self._robot, "wrist")  # Use wrist rotation from state
         qx, qy, qz, qw = quaternion_from_euler(ex, ey, ez)
 

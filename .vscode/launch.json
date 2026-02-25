@@ -11,7 +11,7 @@
             "module": "uvicorn",
             "args": [
                 "lodge-scripts.env-server:app",
-                "--reload",
+                // "--reload",
                 "--port",
                 "8800"
             ],

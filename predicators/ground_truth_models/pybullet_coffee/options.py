@@ -723,11 +723,6 @@ class PyBulletCoffeeGroundTruthOptionFactory(GroundTruthOptionFactory):
             if abs(delta_rot) < 0.1:
                 delta_rot = 0
 
-            from pybullet_utils.transformations import (
-                euler_from_quaternion,
-                quaternion_from_euler,
-            )
-
             curr_euler = euler_from_quaternion(current_pose.orientation)
             goal_euler = (curr_euler[0], curr_euler[1], curr_euler[2] + delta_rot)
             goal_orn = quaternion_from_euler(*goal_euler)

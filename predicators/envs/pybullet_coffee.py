@@ -1,7 +1,7 @@
 """A PyBullet version of Coffee."""
 
 import logging
-from typing import Any, ClassVar, Dict, List, Optional, Tuple
+from typing import Any, ClassVar, Dict, List, Optional, Sequence, Set, Tuple
 from pybullet_utils.transformations import euler_from_quaternion, quaternion_from_euler
 
 import numpy as np
@@ -18,7 +18,15 @@ from predicators.pybullet_helpers.robots import (
     create_single_arm_pybullet_robot,
 )
 from predicators.settings import CFG
-from predicators.structs import Action, Array, EnvironmentTask, Object, State
+from predicators.structs import (
+    Action,
+    Array,
+    EnvironmentTask,
+    Object,
+    Predicate,
+    State,
+    Type,
+)
 
 
 class PyBulletCoffeeEnv(PyBulletEnv, CoffeeEnv):
@@ -59,16 +67,16 @@ class PyBulletCoffeeEnv(PyBulletEnv, CoffeeEnv):
     jug_height: ClassVar[float] = 0.13
     jug_init_x_lb: ClassVar[float] = x_lb
     jug_init_x_ub: ClassVar[float] = x_ub
-    jug_init_y_lb: ClassVar[float] = machine_y + 0.4
-    jug_init_y_ub: ClassVar[float] = machine_y + 0.6
+    jug_init_y_lb: ClassVar[float] = machine_y + 0.5
+    jug_init_y_ub: ClassVar[float] = machine_y + 0.65
     jug_handle_height: ClassVar[float] = 3 * jug_height / 4
 
     # Scale cup dimensions.
     cup_radius: ClassVar[float] = 0.03
     cup_init_x_lb: ClassVar[float] = x_lb
     cup_init_x_ub: ClassVar[float] = x_ub
-    cup_init_y_lb: ClassVar[float] = machine_y + 0.2
-    cup_init_y_ub: ClassVar[float] = machine_y + 0.4
+    cup_init_y_lb: ClassVar[float] = machine_y + 0.15
+    cup_init_y_ub: ClassVar[float] = machine_y + 0.5
     cup_capacity_lb: ClassVar[float] = 0.06
     cup_capacity_ub: ClassVar[float] = 0.13
     cup_liquid_radius_scale: ClassVar[float] = 0.8
@@ -94,13 +102,14 @@ class PyBulletCoffeeEnv(PyBulletEnv, CoffeeEnv):
     pour_pos_tol: ClassVar[float] = 0.1
     init_padding: ClassVar[float] = 0.05
     pick_jug_y_padding: ClassVar[float] = 0.15
+    jug_pickable_rot: ClassVar[float] = np.pi
 
     # Update simulation parameters.
     pour_x_offset: ClassVar[float] = 1.5 * (cup_radius + jug_radius)
     pour_y_offset: ClassVar[float] = -0.015
-    pour_z_offset: ClassVar[float] = 1.4 * (
-        cup_capacity_ub + jug_height - jug_handle_height
-    ) + z_lb
+    pour_z_offset: ClassVar[float] = (
+        1.4 * (cup_capacity_ub + jug_height - jug_handle_height) + z_lb
+    )
     tilt_ub: ClassVar[float] = np.pi / 6
     pour_tilt_angle: ClassVar[float] = tilt_ub
     pour_velocity: ClassVar[float] = cup_capacity_ub / 10.0
@@ -117,9 +126,35 @@ class PyBulletCoffeeEnv(PyBulletEnv, CoffeeEnv):
     def __init__(self, use_gui: bool = True) -> None:
         super().__init__(use_gui)
 
+        self._JugPickable = Predicate(
+            "JugPickable", [self._jug_type], self._JugPickable_holds
+        )
+
         # We track the correspondence between PyBullet object IDs and Object
         # instances. This correspondence changes with the task.
         self._cup_id_to_cup: Dict[int, Object] = {}
+
+    @property
+    def predicates(self) -> Set[Predicate]:
+        return {
+            self._CupFilled,
+            self._Holding,
+            self._OnTable,
+            self._HandEmpty,
+            self._JugPickable,
+            self._JugFilled,
+            self._JugInMachine,
+            self._MachineOn,
+        }
+
+    def _JugPickable_holds(self, state: State, objects: Sequence[Object]) -> bool:
+        """The jug is pickable when on-table and handle rotation is accessible."""
+        (jug,) = objects
+        if not self._OnTable_holds(state, [jug]):
+            return False
+        jug_rot = state.get(jug, "rot")
+        rot_error = (jug_rot - self.jug_pickable_rot + np.pi) % (2 * np.pi) - np.pi
+        return abs(rot_error) < self.pick_jug_rot_tol
 
     @classmethod
     def initialize_pybullet(
@@ -395,10 +430,14 @@ class PyBulletCoffeeEnv(PyBulletEnv, CoffeeEnv):
         """Run super(), then handle coffee-specific resetting."""
         super()._reset_state(state)
 
+        # Reset coffee-specific latent state variables from the symbolic state.
+        self._jug_filled_state = float(state.get(self._jug, "is_filled"))
+        self._machine_on_state = float(state.get(self._machine, "is_on"))
+
         # Reset jug based on the state.
         jug_x = state.get(self._jug, "x")
         jug_y = state.get(self._jug, "y")
-        jug_z = self._get_jug_z(state, self._jug)
+        jug_z = state.get(self._jug, "z")
         jug_rot = state.get(self._jug, "rot")
 
         # Convert 2D rotation to quaternion (rotation around z-axis).
@@ -406,7 +445,7 @@ class PyBulletCoffeeEnv(PyBulletEnv, CoffeeEnv):
 
         p.resetBasePositionAndOrientation(
             self._jug_id,
-            [jug_x, jug_y, jug_z + self.jug_height / 2.0],
+            [jug_x, jug_y, jug_z],
             jug_orn,
             physicsClientId=self._physics_client_id,
         )
@@ -425,8 +464,7 @@ class PyBulletCoffeeEnv(PyBulletEnv, CoffeeEnv):
 
             cup_x = state.get(cup_obj, "x")
             cup_y = state.get(cup_obj, "y")
-            # Position cup center so bottom sits on table
-            cup_z = self.z_lb + cup_height / 2.0
+            cup_z = state.get(cup_obj, "z")
 
             p.resetBasePositionAndOrientation(
                 cup_id,
@@ -498,7 +536,7 @@ class PyBulletCoffeeEnv(PyBulletEnv, CoffeeEnv):
         )
 
         # Get jug state.
-        (jug_x, jug_y, jug_z_center), jug_orn_quat = p.getBasePositionAndOrientation(
+        (jug_x, jug_y, jug_z), jug_orn_quat = p.getBasePositionAndOrientation(
             self._jug_id, physicsClientId=self._physics_client_id
         )
 
@@ -519,7 +557,7 @@ class PyBulletCoffeeEnv(PyBulletEnv, CoffeeEnv):
             jug_filled = 0.0
 
         state_dict[self._jug] = np.array(
-            [jug_x, jug_y, jug_rot, float(jug_held), jug_filled], dtype=np.float32
+            [jug_x, jug_y, jug_z, jug_rot, float(jug_held), jug_filled], dtype=np.float32
         )
 
         # Get machine state.
@@ -527,11 +565,13 @@ class PyBulletCoffeeEnv(PyBulletEnv, CoffeeEnv):
             machine_on = self._machine_on_state
         else:
             machine_on = 0.0
-        state_dict[self._machine] = np.array([machine_on], dtype=np.float32)
+        state_dict[self._machine] = np.array(
+            [self.machine_x, self.machine_y, self.z_lb, machine_on], dtype=np.float32
+        )
 
         # Get cup states.
         for cup_id, cup in self._cup_id_to_cup.items():
-            (cup_x, cup_y, cup_z_center), _ = p.getBasePositionAndOrientation(
+            (cup_x, cup_y, cup_z), _ = p.getBasePositionAndOrientation(
                 cup_id, physicsClientId=self._physics_client_id
             )
 
@@ -547,7 +587,7 @@ class PyBulletCoffeeEnv(PyBulletEnv, CoffeeEnv):
                 current = 0.0
 
             state_dict[cup] = np.array(
-                [cup_x, cup_y, capacity, target, current], dtype=np.float32
+                [cup_x, cup_y, cup_z, capacity, target, current], dtype=np.float32
             )
 
         joint_positions = self._pybullet_robot.get_joints()
@@ -610,9 +650,7 @@ class PyBulletCoffeeEnv(PyBulletEnv, CoffeeEnv):
                     if new_liquid <= capacity:
                         # Update the live observation so _get_state() picks up
                         # this change via _current_state.
-                        self._current_observation.set(
-                            cup, "current_liquid", new_liquid
-                        )
+                        self._current_observation.set(cup, "current_liquid", new_liquid)
 
         # Update the current observation with modified state variables.
         # We need to rebuild the state with updated values.
@@ -773,7 +811,7 @@ class PyBulletCoffeeEnv(PyBulletEnv, CoffeeEnv):
             liquid_z = jug_z + 0.04 - 0.1 * self.jug_height
             p.resetBasePositionAndOrientation(
                 self._jug_liquid_id,
-                [jug_x, jug_y + 0.02, liquid_z],
+                [jug_x + 0.01, jug_y + 0.02, liquid_z],
                 jug_orn,
                 physicsClientId=self._physics_client_id,
             )

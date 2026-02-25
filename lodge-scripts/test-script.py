@@ -113,21 +113,19 @@ def _render():
 
 def main():
     _render()
-    run_motion("MoveToTwistJug('robby', 'juggy')")
-    _render()
     run_motion("RotateItemUntilHandleAccessible('robby', 'juggy')")
     _render()
     run_motion("PickJug('robby', 'juggy')")
     _render()
     run_motion("PlaceJugInMachine('robby', 'juggy', 'coffee_machine')")
     _render()
-    run_motion("TurnMachineOn('robby', 'coffee_machine')")
+    run_motion("TurnMachineOnAndFill('robby', 'coffee_machine')")
     _render()
     run_motion("PickJug('robby', 'juggy')")
     _render()
-    run_motion("Pour('robby', 'juggy', 'cup0')")
+    run_motion("PourSomeLiquid('robby', 'juggy', 'cup0')")
     _render()
-    run_motion("Pour('robby', 'juggy', 'cup1')")
+    run_motion("PourSomeLiquid('robby', 'juggy', 'cup1')")
     _render()
 
 

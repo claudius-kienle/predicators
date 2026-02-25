@@ -107,10 +107,10 @@ class CoffeeEnv(BaseEnv):
 
         # Types
         self._robot_type = Type("robot", ["x", "y", "z", "tilt", "wrist", "fingers"])
-        self._jug_type = Type("jug", ["x", "y", "rot", "is_held", "is_filled"])
-        self._machine_type = Type("machine", ["is_on"])
+        self._jug_type = Type("jug", ["x", "y", "z", "rot", "is_held", "is_filled"])
+        self._machine_type = Type("machine", ["x", "y", "z", "is_on"])
         self._cup_type = Type(
-            "cup", ["x", "y", "capacity_liquid", "target_liquid", "current_liquid"]
+            "cup", ["x", "y", "z", "capacity_liquid", "target_liquid", "current_liquid"]
         )
 
         # Predicates
@@ -480,6 +480,9 @@ class CoffeeEnv(BaseEnv):
         }
         # Create the machine.
         common_state_dict[self._machine] = {
+            "x": self.machine_x,
+            "y": self.machine_y,
+            "z": self.z_lb,
             "is_on": 0.0,  # machine starts off
         }
         for _ in range(num):
@@ -512,6 +515,7 @@ class CoffeeEnv(BaseEnv):
                     collision_geoms.add(gm)
                     # Sample a cup capacity, which also defines its height.
                     cap = rng.uniform(self.cup_capacity_lb, self.cup_capacity_ub)
+                    cup_height = (self.cup_capacity_lb + self.cup_capacity_ub) / 2.0
                     # Target liquid amount for filling the cup.
                     target = cap * self.cup_target_frac
                     # The initial liquid amount is always 0.
@@ -519,6 +523,7 @@ class CoffeeEnv(BaseEnv):
                     cup_state_dict[cup] = {
                         "x": x,
                         "y": y,
+                        "z": self.z_lb + cup_height / 2, # not held
                         "capacity_liquid": cap,
                         "target_liquid": target,
                         "current_liquid": current,
@@ -539,6 +544,7 @@ class CoffeeEnv(BaseEnv):
             state_dict[self._jug] = {
                 "x": x,
                 "y": y,
+                "z": self.z_lb + self.jug_height / 2, # not held
                 "rot": rot,
                 "is_held": 0.0,  # jug starts off not held
                 "is_filled": 0.0,  # jug starts off empty

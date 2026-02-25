@@ -88,8 +88,8 @@ class PyBulletCoffeeGroundTruthOptionFactory(GroundTruthOptionFactory):
         # MoveToTwistJug - Move to above the jug to prepare for twisting
         option_types = [robot_type, jug_type]
         params_space = Box(0, 1, (0,))
-        MoveToTwistJug = utils.LinearChainParameterizedOption(
-            "MoveToTwistJug",
+        RotateItemUntilHandleAccessible = utils.LinearChainParameterizedOption(
+            "RotateItemUntilHandleAccessible",
             [
                 # move above jug
                 cls._create_coffee_move_to_jug_top_option(
@@ -107,15 +107,6 @@ class PyBulletCoffeeGroundTruthOptionFactory(GroundTruthOptionFactory):
                     option_types=option_types,
                     params_space=params_space,
                 ),
-            ],
-        )
-
-        # RotateItemUntilHandleAccessible - Rotate the jug until handle is accessible
-        option_types = [robot_type, jug_type]
-        params_space = Box(0, 1, (0,))  # No parameters needed
-        RotateItemUntilHandleAccessible = utils.LinearChainParameterizedOption(
-            "RotateItemUntilHandleAccessible",
-            [
                 create_change_fingers_option(
                     pybullet_robot,
                     "CloseFingers",
@@ -225,7 +216,7 @@ class PyBulletCoffeeGroundTruthOptionFactory(GroundTruthOptionFactory):
                 # Move above the dispense area
                 cls._create_coffee_move_to_dispense_area_option(
                     name="MoveEndEffectorToPrePlace",
-                    z_offset=0.05,
+                    z_offset=0.08,
                     finger_status="closed",
                     pybullet_robot=pybullet_robot,
                     option_types=option_types,
@@ -267,7 +258,7 @@ class PyBulletCoffeeGroundTruthOptionFactory(GroundTruthOptionFactory):
         # TurnMachineOn - Press the button to turn the machine on
         option_types = [robot_type, machine_type]
         params_space = Box(0, 1, (0,))
-        TurnMachineOn = cls._create_press_button_option(
+        TurnMachineOnAndFill = cls._create_press_button_option(
             pybullet_robot=pybullet_robot,
             option_types=option_types,
             params_space=params_space,
@@ -276,8 +267,8 @@ class PyBulletCoffeeGroundTruthOptionFactory(GroundTruthOptionFactory):
         # Pour - Pour from the jug into a cup
         option_types = [robot_type, jug_type, cup_type]
         params_space = Box(0, 1, (0,))
-        Pour = utils.LinearChainParameterizedOption(
-            "Pour",
+        PourSomeLiquid = utils.LinearChainParameterizedOption(
+            "PourSomeLiquid",
             [
                 # Move to above the cup
                 cls._create_coffee_move_to_pour_position_option(
@@ -326,12 +317,11 @@ class PyBulletCoffeeGroundTruthOptionFactory(GroundTruthOptionFactory):
         )
 
         return {
-            MoveToTwistJug,
             RotateItemUntilHandleAccessible,
             PickJug,
             PlaceJugInMachine,
-            TurnMachineOn,
-            Pour,
+            TurnMachineOnAndFill,
+            PourSomeLiquid,
         }
 
     @classmethod
@@ -409,7 +399,7 @@ class PyBulletCoffeeGroundTruthOptionFactory(GroundTruthOptionFactory):
             jug_x = state.get(jug, "x")
             jug_y = state.get(jug, "y")
             jug_z = (
-                PyBulletCoffeeEnv.z_lb + PyBulletCoffeeEnv.jug_height - 0.05 + z_offset
+                PyBulletCoffeeEnv.z_lb + PyBulletCoffeeEnv.jug_height - 0.04 + z_offset
             )
 
             jug_x -= 0.04  # handle offset
@@ -536,13 +526,7 @@ class PyBulletCoffeeGroundTruthOptionFactory(GroundTruthOptionFactory):
             m_x = PyBulletCoffeeEnv.machine_x
             m_y = PyBulletCoffeeEnv.machine_y
 
-            # If jug is held, adjust x position accounting for jug
-            if state.get(jug, "is_held") > 0.5:
-                t_x = 0.05  #
-            else:
-                t_x = 0
-
-            d_area_x = m_x - 0.075 - t_x
+            d_area_x = m_x - 0.15
             d_area_y = m_y
             d_area_z = PyBulletCoffeeEnv.z_lb + 0.10 + z_offset
 
@@ -637,7 +621,7 @@ class PyBulletCoffeeGroundTruthOptionFactory(GroundTruthOptionFactory):
 
         return create_move_end_effector_to_pose_option(
             pybullet_robot,
-            "TurnMachineOn",
+            "TurnMachineOnAndFill",
             option_types,
             params_space,
             _get_current_and_target_pose_and_finger_status,
@@ -716,7 +700,7 @@ class PyBulletCoffeeGroundTruthOptionFactory(GroundTruthOptionFactory):
 
             jug_rot = state.get(jug, "rot")
 
-            goal_rot_jug = np.pi
+            goal_rot_jug = PyBulletCoffeeEnv.jug_pickable_rot
 
             delta_rot = -(goal_rot_jug - jug_rot + np.pi) % (2 * np.pi) - np.pi
 

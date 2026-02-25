@@ -35,8 +35,17 @@ def parse_tasks(env: BaseEnv, domain_name: str) -> Generator[str, None, None]:
 
 LODGE_EXP_DIR = Path(__file__).parent.parent.parent.parent
 
+
 def gen_data():
-    utils.update_config({"seed": 0})
+    utils.update_config(
+        {
+            "seed": 0,
+            "pybullet_robot": "panda",
+            # "pybullet_sim_steps_per_action": 100,
+            "pybullet_camera_width": 640,
+            "pybullet_camera_height": 480,
+        }
+    )
     env = create_new_env("pybullet_coffee", do_cache=True, use_gui=False)
     domain_name = env.get_name()
 
@@ -47,33 +56,40 @@ def gen_data():
         # generate problems
         for i, task in enumerate(parse_tasks(env, domain_name)):
             (exp_dir / "problems" / f"p{i:02d}.pddl").write_text(task)
+    return
 
-    if False:
+    if True:
         # generate domain
         preds = env.predicates
         options = get_gt_options(env.get_name())
 
-        nsrts = get_gt_nsrts(env.get_name(), predicates_to_keep=preds, options_to_keep=options)
+        nsrts = get_gt_nsrts(
+            env.get_name(), predicates_to_keep=preds, options_to_keep=options
+        )
 
         domain_pddl = utils.create_pddl_domain(nsrts, preds, env.types, domain_name)
         (exp_dir / "domain.pddl").write_text(domain_pddl)
 
         # domain skeleton
-        domain_pddl = utils.create_pddl_domain([], env.goal_predicates, env.types, domain_name)
+        domain_pddl = utils.create_pddl_domain(
+            [], env.goal_predicates, env.types, domain_name
+        )
         (exp_dir / "domain_skeleton.pddl").write_text(domain_pddl)
 
-    if True:
+    if False:
         # generate function stubs (options)
         options = get_gt_options(env.get_name())
-
+        _MOTION_NAME_ALIASES_INV = {v: k for k, v in _MOTION_NAME_ALIASES.items()}
         func_subs_str = ""
         for option in options:
-            option_name = option.name
-            params = ", ".join([f"p{i}: {var.name.capitalize()}" for i, var in enumerate(option.types)])
+            option_name = _MOTION_NAME_ALIASES_INV.get(option.name, option.name)
+            params = ", ".join(
+                [f"p{i}: {var.name.capitalize()}" for i, var in enumerate(option.types)]
+            )
             func_subs_str += f"def {option_name}({params}): ...\n\n"
         (exp_dir / "function_stubs.py").write_text(func_subs_str)
 
-    if True:
+    if False:
         # generate domain knowledge
         (exp_dir / "domain_knowledge.txt").write_text(env.__doc__ or "")
 

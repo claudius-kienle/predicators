@@ -113,9 +113,14 @@ def _render():
 
 def main():
     _render()
+    print(env._current_state.get(env._jug, "rot") - np.pi)
+    return
     run_motion("RotateItemUntilHandleAccessible('robby', 'juggy')")
     _render()
+    print(env._current_state.get(env._jug, "rot"))
     run_motion("PickJug('robby', 'juggy')")
+    print(env._current_state.get(env._jug, "rot") - np.pi)
+    return
     _render()
     run_motion("PlaceJugInMachine('robby', 'juggy', 'coffee_machine')")
     _render()

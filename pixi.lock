@@ -106,7 +106,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/b7/b9/c538f279a4e237a006a2c98387d081e9eb060d203d8ed34467cc0f0b9b53/packaging-26.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/e9/aa/1ba5c0835aa83af896cdb61df439335f39ca59392aff5fd1a06a152a7aae/pandas-1.5.1-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/57/78/3f3a6c8f9447a947af2f2a191f71cc870b0fa673432044f38d966f3fd9c0/pathos-0.2.9-py3-none-any.whl
-      - pypi: git+https://github.com/claudius-kienle/pddl-utils#272e1cf540968b3ab6f903c21880449f554d5baa
+      - pypi: git+https://github.com/claudius-kienle/pddl-utils?rev=main#0d3b947a88ed6464baf5df38c035ca39ea2459bc
       - pypi: git+https://github.com/tomsilver/pg3.git#d93fd9f5037b58fa1e10f65555558474415adadc
       - pypi: https://files.pythonhosted.org/packages/b5/a2/7a09695dc636bf8d0a1b63022f58701177b7dc6fad30f6d6bc343e5473a4/pillow-10.3.0-cp310-cp310-manylinux_2_28_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/cb/28/3bfe2fa5a7b9c46fe7e13c97bda14c895fb10fa2ebf1d0abb90e0cea7ee1/platformdirs-4.5.1-py3-none-any.whl
@@ -608,29 +608,29 @@ packages:
   - opencv-python>=3.0 ; extra == 'other'
   - matplotlib>=3.0 ; extra == 'other'
   - moviepy>=1.0.0 ; extra == 'other'
-  - moviepy>=1.0.0 ; extra == 'testing'
-  - swig==4.* ; extra == 'testing'
   - pygame==2.1.0 ; extra == 'testing'
-  - mujoco==2.2 ; extra == 'testing'
-  - opencv-python>=3.0 ; extra == 'testing'
-  - matplotlib>=3.0 ; extra == 'testing'
+  - lz4>=3.1.0 ; extra == 'testing'
   - box2d-py==2.3.5 ; extra == 'testing'
   - mujoco-py>=2.1,<2.2 ; extra == 'testing'
-  - lz4>=3.1.0 ; extra == 'testing'
+  - swig==4.* ; extra == 'testing'
+  - matplotlib>=3.0 ; extra == 'testing'
+  - moviepy>=1.0.0 ; extra == 'testing'
   - imageio>=2.14.1 ; extra == 'testing'
+  - opencv-python>=3.0 ; extra == 'testing'
+  - mujoco==2.2 ; extra == 'testing'
   - pytest==7.0.1 ; extra == 'testing'
-  - moviepy>=1.0.0 ; extra == 'all'
-  - swig==4.* ; extra == 'all'
   - pygame==2.1.0 ; extra == 'all'
-  - ale-py~=0.8.0 ; extra == 'all'
-  - mujoco==2.2 ; extra == 'all'
-  - opencv-python>=3.0 ; extra == 'all'
-  - matplotlib>=3.0 ; extra == 'all'
+  - lz4>=3.1.0 ; extra == 'all'
   - pytest==7.0.1 ; extra == 'all'
   - box2d-py==2.3.5 ; extra == 'all'
   - mujoco-py>=2.1,<2.2 ; extra == 'all'
-  - lz4>=3.1.0 ; extra == 'all'
+  - swig==4.* ; extra == 'all'
+  - matplotlib>=3.0 ; extra == 'all'
+  - moviepy>=1.0.0 ; extra == 'all'
   - imageio>=2.14.1 ; extra == 'all'
+  - opencv-python>=3.0 ; extra == 'all'
+  - mujoco==2.2 ; extra == 'all'
+  - ale-py~=0.8.0 ; extra == 'all'
   requires_python: '>=3.6'
 - pypi: https://files.pythonhosted.org/packages/41/55/55d157aa8693090954fc9639bf27218240517c3bc7afa6e97412da6ebfd9/gym_notices-0.1.0-py3-none-any.whl
   name: gym-notices
@@ -1244,7 +1244,7 @@ packages:
   - pox>=0.3.1
   - multiprocess>=0.70.13
   requires_python: '>=2.7,!=3.0.*,!=3.1.*,!=3.2.*,!=3.3.*,!=3.4.*,!=3.5.*,!=3.6.*'
-- pypi: git+https://github.com/claudius-kienle/pddl-utils#272e1cf540968b3ab6f903c21880449f554d5baa
+- pypi: git+https://github.com/claudius-kienle/pddl-utils?rev=main#0d3b947a88ed6464baf5df38c035ca39ea2459bc
   name: pddl-utils
   version: 0.1.0
   requires_dist:

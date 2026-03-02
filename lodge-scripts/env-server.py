@@ -14,11 +14,9 @@ import pickle
 from pathlib import Path
 
 from predicators.envs.pybullet_coffee import PyBulletCoffeeEnv
-from predicators.ground_truth_models import get_gt_nsrts, get_gt_options
-from predicators.option_model import create_option_model
+from predicators.ground_truth_models import get_gt_options
 from predicators.structs import (
     _Option,
-    Array,
     GroundAtom,
     Object,
     ParameterizedOption,
@@ -93,7 +91,7 @@ def remap_state_to_dict(
                 feature_dict.pop("fingers", None)
             if obj.type.name == "jug" and "rot" in feature_dict:
                 rot = float(feature_dict.pop("rot"))
-                feature_dict["handle_accessible"] = abs(abs(rot) - np.pi) < 0.5
+                feature_dict["handle_accessible"] = abs(abs(rot) - np.pi) < 0.75
         else:
             raise NotImplementedError(f"Unknown environment name {env_name}")
 
@@ -131,6 +129,7 @@ def _get_image() -> Image.Image:
     try:
         image = env.render_plt()
         image = image.get_figure()
+        assert image is not None
     except NotImplementedError:
         images = env.render()
         assert len(images) == 1, "Expected exactly one camera image"

@@ -88,8 +88,8 @@ class PyBulletCoffeeGroundTruthOptionFactory(GroundTruthOptionFactory):
         # MoveToTwistJug - Move to above the jug to prepare for twisting
         option_types = [robot_type, jug_type]
         params_space = Box(0, 1, (0,))
-        RotateItemUntilHandleAccessible = utils.LinearChainParameterizedOption(
-            "RotateItemUntilHandleAccessible",
+        GraspJugAndRotateUntilHandleAccessible = utils.LinearChainParameterizedOption(
+            "GraspJugAndRotateUntilHandleAccessible",
             [
                 # move above jug
                 cls._create_coffee_move_to_jug_top_option(
@@ -147,8 +147,8 @@ class PyBulletCoffeeGroundTruthOptionFactory(GroundTruthOptionFactory):
         # PickJug - Pick up the jug by the handle
         option_types = [robot_type, jug_type]
         params_space = Box(0, 1, (0,))
-        PickJug = utils.LinearChainParameterizedOption(
-            "PickJug",
+        PickJugAtHandle = utils.LinearChainParameterizedOption(
+            "PickJugAtHandle",
             [
                 cls._create_rotate_to_abs_z_rotation(
                     abs_z_rotation=0,
@@ -317,8 +317,8 @@ class PyBulletCoffeeGroundTruthOptionFactory(GroundTruthOptionFactory):
         )
 
         return {
-            RotateItemUntilHandleAccessible,
-            PickJug,
+            GraspJugAndRotateItemUntilHandleAccessible,
+            PickJugAtHandle,
             PlaceJugInMachine,
             TurnMachineOnAndFill,
             PourSomeLiquid,

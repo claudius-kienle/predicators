@@ -36,14 +36,15 @@ from predicators.structs import (
 
 lodge_handover = Path(__file__).parent.parent / "lodge-handover"
 
-def to_snake(pascal:str) -> str:
-  """Converts a Pascal case string to snake case.
-  """
-  magic = re.findall('[A-Z]+[a-z]*', pascal)
-  snake = '_'.join(magic)
-  snake = snake.lower()
-  
-  return snake
+
+def to_snake(pascal: str) -> str:
+    """Converts a Pascal case string to snake case."""
+    magic = re.findall("[A-Z]+[a-z]*", pascal)
+    snake = "_".join(magic)
+    snake = snake.lower()
+
+    return snake
+
 
 def create_dataset(env: BaseEnv, options: set[ParameterizedOption]):
     """Create offline datasets for training, given a set of training tasks for
@@ -105,8 +106,7 @@ def create_dataset(env: BaseEnv, options: set[ParameterizedOption]):
         curr_traj_states_for_vlm: list[State] = []
         for s in states:
             curr_traj_states_for_vlm.append(
-                State({obj: np.array([]) for obj in all_objs},
-                simulator_state=s)
+                State({obj: np.array([]) for obj in all_objs}, simulator_state=s)
             )
 
         curr_traj_actions_for_vlm: list[Action] = []
@@ -159,6 +159,32 @@ def create_dataset(env: BaseEnv, options: set[ParameterizedOption]):
     return Dataset(option_segmented_trajs, ground_atoms_traj), train_tasks
 
 
+def function_mapping(nsrts: list[NSRT]):
+    function_stubs = {}
+    for nsrt in nsrts:
+        op_vars = nsrt.op.parameters
+
+        option_name = nsrt.option.name
+        option_vars = nsrt.option_vars
+        assert (
+            option_vars[0].type.name == "robot"
+        )  # in this env, we always also pass the robot
+        option_vars = op_vars[1:]
+
+        arg_mapping: list[int | None] = []
+        for op_var in op_vars:
+            if op_var in option_vars:
+                arg_mapping.append(option_vars.index(op_var))
+            else:
+                arg_mapping.append(None)
+
+        function_stubs[nsrt.op.name] = {
+            "name": to_snake(option_name),
+            "arg_mapping": arg_mapping,
+        }
+    return function_stubs
+
+
 def main():
     args = utils.parse_args()
     utils.update_config(args)
@@ -201,7 +227,12 @@ def main():
 
     pddl_ops = [nsrt.pddl_str() for nsrt in nsrts]
     pddl_preds = [pred.pddl_str() for pred in predicates]
-    pddl_types = " ".join([f"{t.name} - {t.parent.name}" if t.parent is not None else t.name for t in env.types])
+    pddl_types = " ".join(
+        [
+            f"{t.name} - {t.parent.name}" if t.parent is not None else t.name
+            for t in env.types
+        ]
+    )
 
     pddl_domain = f"""(define (domain furniture_bench)
     (:requirements :strips :typing :universal-preconditions :negative-preconditions :disjunctive-preconditions :existential-preconditions :conditional-effects :equality)
@@ -212,30 +243,10 @@ def main():
     {' '.join(pddl_ops)}
 )"""
 
-
-    function_stubs = {}
-    for nsrt in nsrts:
-        op_vars = nsrt.op.parameters
-
-        option_name = nsrt.option.name
-        option_vars = nsrt.option_vars
-        assert option_vars[0].type.name == "robot"  # in this env, we always also pass the robot
-        option_vars = op_vars[1:]
-
-        arg_mapping = []
-        for op_var in op_vars:
-            if op_var in option_vars:
-                arg_mapping.append(option_vars.index(op_var))
-            else:
-                arg_mapping.append(None)
-            
-        function_stubs[nsrt.op.name] = {
-            "name": to_snake(option_name),
-            "arg_mapping": arg_mapping,
-        }
-
     (lodge_handover / "proposed_domain.pddl").write_text(pddl_domain)
-    (lodge_handover / "function_stubs.json").write_text(json.dumps(function_stubs, indent=4))
+    (lodge_handover / "function_stubs.json").write_text(
+        json.dumps(function_mapping(nsrts), indent=4)
+    )
 
 
 if __name__ == "__main__":

@@ -317,7 +317,7 @@ class PyBulletCoffeeGroundTruthOptionFactory(GroundTruthOptionFactory):
         )
 
         return {
-            GraspJugAndRotateItemUntilHandleAccessible,
+            GraspJugAndRotateUntilHandleAccessible,
             PickJugAtHandle,
             PlaceJugInMachine,
             TurnMachineOnAndFill,

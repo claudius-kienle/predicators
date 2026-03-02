@@ -74,31 +74,30 @@ def image_to_base64(image: Image.Image) -> str:
 _BOOL_FEATURES = {"is_on", "is_filled", "is_held", "handle_accessible"}
 
 
-def remap_state_to_dict(
-    state: State, env_name: str | None = None
-) -> dict[str, dict[str, float | bool]]:
+def remap_state_to_dict(state: State, env_name: str | None = None, raw: bool = False) -> dict[str, dict[str, float | bool]]:
     """Remap state features into a dict for each object."""
     result = {}
     for obj in state.data:
         feature_dict: dict[str, float | bool] = {}
         for i, feature_name in enumerate(obj.type.feature_names):
             feature_dict[feature_name] = state.data[obj][i]
+        
+        if not raw:
+            if env_name == "pybullet_coffee":
+                if obj.type.name == "robot":
+                    feature_dict.pop("tilt", None)
+                    feature_dict.pop("wrist", None)
+                    feature_dict.pop("fingers", None)
+                if obj.type.name == "jug" and "rot" in feature_dict:
+                    rot = float(feature_dict.pop("rot"))
+                    feature_dict["handle_accessible"] = abs(abs(rot) - np.pi) < 0.75
+            else:
+                raise NotImplementedError(f"Unknown environment name {env_name}")
 
-        if env_name == "pybullet_coffee":
-            if obj.type.name == "robot":
-                feature_dict.pop("tilt", None)
-                feature_dict.pop("wrist", None)
-                feature_dict.pop("fingers", None)
-            if obj.type.name == "jug" and "rot" in feature_dict:
-                rot = float(feature_dict.pop("rot"))
-                feature_dict["handle_accessible"] = abs(abs(rot) - np.pi) < 0.75
-        else:
-            raise NotImplementedError(f"Unknown environment name {env_name}")
-
-        # Cast float flags (0.0 / 1.0) to proper booleans.
-        for key in _BOOL_FEATURES:
-            if key in feature_dict:
-                feature_dict[key] = bool(feature_dict[key] > 0.5)
+            # Cast float flags (0.0 / 1.0) to proper booleans.
+            for key in _BOOL_FEATURES:
+                if key in feature_dict:
+                    feature_dict[key] = bool(feature_dict[key] > 0.5)
 
         result[f"{obj.name}:{obj.type.name}"] = feature_dict
     return result
@@ -116,7 +115,7 @@ utils.update_config(
         "pybullet_camera_height": 480,
     }
 )
-env: PyBulletCoffeeEnv = create_new_env("pybullet_coffee", do_cache=True, use_gui=True)  # type: ignore
+env: PyBulletCoffeeEnv = create_new_env("pybullet_coffee", do_cache=True, use_gui=False)  # type: ignore
 
 states = StateStorage()
 
@@ -149,9 +148,7 @@ def _add_curr_state():
 
 @app.post("/set-environment", operation_id="set_environment")
 def set_environment(env_name: str):
-    assert (
-        env.get_name() == env_name
-    ), f"Expected environment name {env_name} but got {env.get_name()}"
+    assert env.get_name() == env_name, f"Expected environment name {env_name} but got {env.get_name()}"
 
 
 @app.get("/stop-recording", operation_id="stop_recording")
@@ -187,9 +184,9 @@ def set_env_hash(s_hash: str):
 
 
 @app.get("/state", operation_id="get_state")
-def get_state() -> dict[str, dict[str, float | bool]]:
+def get_state(raw: bool = False) -> dict[str, dict[str, float | bool]]:
     state = env.get_observation()
-    return remap_state_to_dict(state, env.get_name())
+    return remap_state_to_dict(state, env.get_name(), raw=raw)
 
 
 @app.get("/image", operation_id="get_image")
@@ -210,31 +207,13 @@ class RunMotionResponseModel(BaseModel):
     translation: bool = False
 
 
-# Maps user-facing / LLM-facing motion names to the canonical pybullet_coffee option names.
-# Rationale:
-#   "RotateItemUntilHandleAccessible" also grasps the jug *during* rotation, so no
-#     separate PickJug is needed afterward.  Shorter aliases avoid that surprise.
-#   "PickJug" specifically picks the jug by the handle; aliases clarify the intent.
-_MOTION_NAME_ALIASES: dict[str, str] = {
-    "GraspJugAndRotateUntilHandleAccessible": "RotateItemUntilHandleAccessible",
-    "PickJugAtHandle": "PickJug",
-}
-
-
-def _map_motion_name(name: str) -> str:
-    """Map an alias or user-facing motion name to the canonical pybullet_coffee option name."""
-    return _MOTION_NAME_ALIASES.get(name, name)
-
-
 def _get_sampler_for_option(option: ParameterizedOption):
     if option.params_space.shape == (0,):
         return utils.null_sampler
     else:
         match option.name:
             case "TwistJug":
-                return lambda _, __, rng, ___: np.array(
-                    rng.uniform(-1, 1, size=(1,)), dtype=np.float32
-                )
+                return lambda _, __, rng, ___: np.array(rng.uniform(-1, 1, size=(1,)), dtype=np.float32)
             case _:
                 raise NotImplementedError(f"Unknown option {option.name}")
 
@@ -287,8 +266,6 @@ def run_motion(motion: str) -> RunMotionResponseModel:
     motion_args = motion_args[:-1]  # remove trailing ")"
     motion_args = [arg.strip()[1:-1] for arg in motion_args.split(",")]
 
-    motion_name = _map_motion_name(motion_name)
-
     options = get_gt_options(env.get_name())
     option = next((opt for opt in options if opt.name == motion_name))
 
@@ -309,9 +286,7 @@ def run_motion(motion: str) -> RunMotionResponseModel:
                 break
         if not cur_option.terminal(state):
             # raise RuntimeError("Failed to execute the motion in the current state.")
-            print(
-                "Warning: Option did not terminate within 100 steps. Forcing termination."
-            )
+            print("Warning: Option did not terminate within 100 steps. Forcing termination.")
             env._current_observation = init_state
             env._reset_state(init_state)
 
@@ -319,13 +294,9 @@ def run_motion(motion: str) -> RunMotionResponseModel:
         # TODO: reset environment
         return RunMotionResponseModel(error_response=str(e))
     except utils.OptionExecutionFailure as e:
-        return RunMotionResponseModel(
-            error_response="The motion failed to execute successfully."
-        )
+        return RunMotionResponseModel(error_response="The motion failed to execute successfully.")
     except TypeError as e:
-        return RunMotionResponseModel(
-            error_response="The motion command is invalid.", translation=True
-        )
+        return RunMotionResponseModel(error_response="The motion command is invalid.", translation=True)
 
     _add_curr_state()
     post_state = _get_curr_hash()
@@ -336,9 +307,13 @@ def run_motion(motion: str) -> RunMotionResponseModel:
     return RunMotionResponseModel(error_response=None)
 
 
+class GetPredicatesEvaluationRequestModel(BaseModel):
+    all_predicates: bool = False
+
+
 @app.post("/predicates-evaluation", operation_id="get_predicates_evaluation")
-def get_predicates_evaluation() -> list[str]:
-    atoms = utils.abstract(env.get_observation(), env.goal_predicates)
+def get_predicates_evaluation(all_predicates: bool = False) -> list[str]:
+    atoms = utils.abstract(env.get_observation(), env.goal_predicates if not all_predicates else env.predicates)
     return [atom.pddl_str() for atom in atoms]
 
 

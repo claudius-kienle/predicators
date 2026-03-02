@@ -969,6 +969,11 @@ class LinearChainParameterizedOption(ParameterizedOption):
     def _terminal(self, state: State, memory: Dict, objects: Sequence[Object],
                   params: Array) -> bool:
         # Check if the last child has terminated.
+        if len(memory) == 0:
+            # just check for last terminal
+            current_child = self._children[-1]
+            return current_child.terminal(state, {}, objects, params)
+
         current_index = memory["current_child_index"]
         if current_index < len(self._children) - 1:
             return False

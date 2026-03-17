@@ -682,9 +682,9 @@ class CoffeeEnv(BaseEnv):
         return (target_x, target_y, target_z)
 
     def _get_cup_to_pour(self, state: State) -> Optional[Object]:
-        jug_x = state.get(self._jug, "x")
-        jug_y = state.get(self._jug, "y")
-        jug_z = self._get_jug_z(state, self._jug)
+        jug_x = state.get(self._robot, "x")
+        jug_y = state.get(self._robot, "y")
+        jug_z = state.get(self._robot, "z")
         jug_pos = (jug_x, jug_y, jug_z)
         closest_cup = None
         closest_cup_dist = float("inf")

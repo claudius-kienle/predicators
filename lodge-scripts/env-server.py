@@ -1,5 +1,7 @@
 import json
 import os
+import subprocess
+import tempfile
 
 import numpy as np
 from PIL import Image
@@ -91,6 +93,8 @@ def remap_state_to_dict(state: State, env_name: str | None = None, raw: bool = F
                 if obj.type.name == "jug" and "rot" in feature_dict:
                     rot = float(feature_dict.pop("rot"))
                     feature_dict["handle_accessible"] = abs(abs(rot) - np.pi) < 0.75
+                if obj.type.name == "machine":
+                    feature_dict['x'] -= 0.1
             else:
                 raise NotImplementedError(f"Unknown environment name {env_name}")
 
@@ -119,6 +123,9 @@ env: PyBulletCoffeeEnv = create_new_env("pybullet_coffee", do_cache=True, use_gu
 
 states = StateStorage()
 
+_recording_frames: list[Image.Image] = []
+_is_recording: bool = False
+
 
 def _get_curr_state() -> State:
     return env._current_observation
@@ -129,7 +136,7 @@ def _get_image() -> Image.Image:
         image = env.render_plt()
         image = image.get_figure()
         assert image is not None
-    except NotImplementedError:
+    except (NotImplementedError, AssertionError):
         images = env.render()
         assert len(images) == 1, "Expected exactly one camera image"
         image = Image.fromarray(images[0])
@@ -151,10 +158,43 @@ def set_environment(env_name: str):
     assert env.get_name() == env_name, f"Expected environment name {env_name} but got {env.get_name()}"
 
 
+@app.post("/start-recording", operation_id="start_recording")
+def start_recording():
+    global _recording_frames, _is_recording
+    _recording_frames = []
+    _is_recording = True
+    # Capture initial frame
+    _recording_frames.append(_get_image())
+    print("Recording started")
+
+
 @app.get("/stop-recording", operation_id="stop_recording")
-def close():
-    print("stop-recording")
-    raise NotImplementedError()
+def stop_recording(output_path: str = "recording.mp4") -> str:
+    global _recording_frames, _is_recording
+    _is_recording = False
+    if not _recording_frames:
+        return "No frames recorded."
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        for i, frame in enumerate(_recording_frames):
+            frame.save(os.path.join(tmpdir, f"frame_{i:05d}.png"))
+
+        subprocess.run(
+            [
+                "ffmpeg", "-y",
+                "-framerate", "10",
+                "-i", os.path.join(tmpdir, "frame_%05d.png"),
+                "-c:v", "libx264",
+                "-pix_fmt", "yuv420p",
+                output_path,
+            ],
+            check=True,
+            capture_output=True,
+        )
+
+    _recording_frames = []
+    print(f"Recording saved to {output_path}")
+    return output_path
 
 
 @app.post("/reset", operation_id="reset")
@@ -162,7 +202,10 @@ def reset(task_idx: int):
     # env.restart_recording()
     env.reset(train_or_test="train", task_idx=task_idx)
 
-    _get_image().save("image2.png")
+    image = _get_image()
+    image.save("image2.png")
+    if _is_recording:
+        _recording_frames.append(image)
     _add_curr_state()
 
 
@@ -282,6 +325,8 @@ def run_motion(motion: str) -> RunMotionResponseModel:
         for _ in range(100):
             act = cur_option.policy(state)
             state = env.step(act)
+            if _is_recording:
+                _recording_frames.append(_get_image())
             if cur_option.terminal(state):
                 break
         if not cur_option.terminal(state):
@@ -313,8 +358,17 @@ class GetPredicatesEvaluationRequestModel(BaseModel):
 
 @app.post("/predicates-evaluation", operation_id="get_predicates_evaluation")
 def get_predicates_evaluation(all_predicates: bool = False) -> list[str]:
-    atoms = utils.abstract(env.get_observation(), env.goal_predicates if not all_predicates else env.predicates)
-    return [atom.pddl_str() for atom in atoms]
+    state = env.get_observation()
+    predicates = env.goal_predicates if not all_predicates else env.predicates
+    all_atoms = utils.all_possible_ground_atoms(state, predicates)
+    evaluated_literals: list[str] = []
+    for atom in all_atoms:
+        atom_str = atom.pddl_str()
+        if atom.holds(state):
+            evaluated_literals.append(atom_str)
+        else:
+            evaluated_literals.append(f"(not {atom_str})")
+    return evaluated_literals
 
 
 @app.get("/get-supported-predicates", operation_id="get_supported_predicates")

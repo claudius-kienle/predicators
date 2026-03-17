@@ -167,22 +167,6 @@ class FurnitureBenchEnv(BaseEnv):
         """Check if two parts can be screwed together."""
         return self.pred_util(state, "screwable", objects)
 
-
-    @classmethod
-    def get_position(cls, obj: Object, state: State) -> Tuple[int, int]:
-        """Public for use by oracle options."""
-        col = state.get(obj, "col")
-        row = state.get(obj, "row")
-        return col, row
-
-    @classmethod
-    def is_adjacent(cls, col_1: int, row_1: int, col_2: int,
-                    row_2: int) -> bool:
-        """Public for use by oracle options."""
-        adjacent_vertical = col_1 == col_2 and abs(row_1 - row_2) == 1
-        adjacent_horizontal = row_1 == row_2 and abs(col_1 - col_2) == 1
-        return adjacent_vertical or adjacent_horizontal
-
     @property
     def predicates(self) -> Set[Predicate]:
         return {

@@ -152,6 +152,7 @@ class GlobalSettings:
     pybullet_birrt_extend_num_interp = 10
     pybullet_control_mode = "position"
     pybullet_max_vel_norm = 0.05
+    pybullet_detailed_goal_predicates = "std"
     # env -> robot -> quaternion
     pybullet_robot_ee_orns = defaultdict(
         # Fetch and Panda gripper down and parallel to x-axis by default.

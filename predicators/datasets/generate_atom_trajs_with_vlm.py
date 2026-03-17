@@ -503,6 +503,10 @@ def _parse_structured_state_into_ground_atoms(
                     for obj_str in objs_strs:
                         if obj_str in ["armrobot", "arm_robot", "robot"]:
                             obj_str = "arm:robot"
+                        if obj_str.endswith("_part"):
+                            obj_str = obj_str[:-5]
+                        elif obj_str.endswith("part"):
+                            obj_str = obj_str[:-4]
                         for sep in [":", "."]:
                             if sep in obj_str:
                                 obj_str = obj_str.split(sep)[0]

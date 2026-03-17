@@ -99,13 +99,13 @@ class PyBulletCoffeeEnv(PyBulletEnv, CoffeeEnv):
     # Update tolerances for new scale.
     grasp_position_tol: ClassVar[float] = 0.0001
     dispense_tol: ClassVar[float] = 0.1
-    pour_pos_tol: ClassVar[float] = 0.1
+    pour_pos_tol: ClassVar[float] = 0.05 ** 2 # squared distance
     init_padding: ClassVar[float] = 0.05
     pick_jug_y_padding: ClassVar[float] = 0.15
     jug_pickable_rot: ClassVar[float] = np.pi
 
     # Update simulation parameters.
-    pour_x_offset: ClassVar[float] = 1.5 * (cup_radius + jug_radius)
+    pour_x_offset: ClassVar[float] = -1.5 * (cup_radius + jug_radius)
     pour_y_offset: ClassVar[float] = -0.015
     pour_z_offset: ClassVar[float] = (
         1.4 * (cup_capacity_ub + jug_height - jug_handle_height) + z_lb
@@ -147,14 +147,50 @@ class PyBulletCoffeeEnv(PyBulletEnv, CoffeeEnv):
             self._MachineOn,
         }
 
+    @property
+    def goal_predicates(self) -> Set[Predicate]:
+        match CFG.pybullet_detailed_goal_predicates:
+            case "all":
+                return {
+                    self._CupFilled,
+                    self._Holding,
+                    self._OnTable,
+                    self._HandEmpty,
+                    self._RobotAboveCup,
+                    self._JugAboveCup,
+                    self._NotAboveCup,
+                    self._PressingButton,
+                    self._NotSameCup,
+                    self._JugPickable,
+                }
+            case "std":
+                return {self._CupFilled}
+
     def _JugPickable_holds(self, state: State, objects: Sequence[Object]) -> bool:
         """The jug is pickable when on-table and handle rotation is accessible."""
         (jug,) = objects
-        if not self._OnTable_holds(state, [jug]):
+        if not self._OnTable_holds(state, [jug]) and not self._JugInMachine_holds(state, [jug, self._machine]):
             return False
         jug_rot = state.get(jug, "rot")
         rot_error = (jug_rot - self.jug_pickable_rot + np.pi) % (2 * np.pi) - np.pi
         return abs(rot_error) < self.pick_jug_rot_tol
+
+    def _robot_jug_above_cup(self, state: State, cup: Object) -> bool:
+        if not self._Holding_holds(state, [self._robot, self._jug]):
+            return False
+        jug_x = state.get(self._jug, "x")
+        jug_y = state.get(self._jug, "y")
+        jug_z = state.get(self._robot, "z") - self.jug_handle_height
+        jug_pos = (jug_x, jug_y, jug_z)
+        cup_x = state.get(cup, "x")
+        cup_y = state.get(cup, "y")
+        pour_pos = (
+            cup_x - self.pour_x_offset,
+            cup_y + self.pour_y_offset,
+            self.pour_z_offset,
+        )
+        sq_dist_to_pour = np.linalg.norm(np.subtract(jug_pos, pour_pos))
+        return bool(sq_dist_to_pour < self.pour_pos_tol)
 
     @classmethod
     def initialize_pybullet(
@@ -631,6 +667,7 @@ class PyBulletCoffeeEnv(PyBulletEnv, CoffeeEnv):
 
         if jug_in_machine and machine_on:
             self._jug_filled_state = 1.0
+            assert self._JugPickable.holds(next_state, [self._jug]), "Jug should be pickable when filled."
 
         # Check for pouring: jug must be held and tilted to tilt_ub.
         jug_held = self._Holding_holds(next_state, [self._robot, self._jug])

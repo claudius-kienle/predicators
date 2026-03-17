@@ -124,7 +124,12 @@ def create_dataset(env: BaseEnv, options: set[ParameterizedOption]):
             op = next(filter(lambda o: o.name == action_name, options))
             args = [objs[arg] for arg in action_args]
             if env.get_name() == "furniture_bench":  # pragma: no cover
-                args.insert(0, objs["arm"])  # in this env, we always also pass the robot
+                if "arm" in objs:
+                    args.insert(0, objs["arm"])  # in this env, we always also pass the robot
+                elif "robot_arm" in objs:
+                    args.insert(0, objs["robot_arm"])
+                else:
+                    raise NotImplementedError()
             g_op = op.ground(args, np.zeros(0, dtype=float))
             curr_traj_actions_for_vlm.append(Action(np.zeros(0, dtype=float), g_op))
 
@@ -150,7 +155,7 @@ def create_dataset(env: BaseEnv, options: set[ParameterizedOption]):
         )
 
     known_predicates = env.goal_predicates
-    vlm = utils.create_vlm_by_name("gpt-4.1-mini")  # pragma: no cover
+    vlm = utils.create_vlm_by_name(CFG.vlm_model_name)  # pragma: no cover
 
     # mimics predicators/datasets/generate_atom_trajs_with_vlm.py:1116
     ground_atoms_traj = _generate_ground_atoms_with_vlm_pure_visual_preds(
@@ -227,7 +232,7 @@ def main():
     pddl_preds = [pred.pddl_str() for pred in predicates]
     pddl_types = " ".join([f"{t.name} - {t.parent.name}" if t.parent is not None else t.name for t in env.types])
 
-    pddl_domain = f"""(define (domain furniture_bench)
+    pddl_domain = f"""(define (domain {env.get_name()})
     (:requirements :strips :typing :universal-preconditions :negative-preconditions :disjunctive-preconditions :existential-preconditions :conditional-effects :equality)
     (:types {pddl_types})
     (:predicates
@@ -237,7 +242,7 @@ def main():
 )"""
 
     (lodge_handover / "proposed_domain.pddl").write_text(pddl_domain)
-    (lodge_handover / "function_stubs.json").write_text(json.dumps(function_mapping(nsrts), indent=4))
+    (lodge_handover / "function_stubs.json").write_text(json.dumps(function_mapping(env.get_name(), nsrts), indent=4))
 
 
 if __name__ == "__main__":
